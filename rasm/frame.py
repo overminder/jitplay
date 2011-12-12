@@ -1,6 +1,7 @@
 from pypy.tool.pairtype import extendabletype
 from rasm.error import OperationError
 from rasm.model import W_Root, W_Error
+from rasm import config
 
 class W_ExecutionError(W_Error):
     def __init__(self, msg, where):
@@ -33,6 +34,9 @@ class W_Frame(W_Root):
 
 
 class Stack(object):
+    """ It's especially amazing that an unsafe stack performs worse
+        than a checked stack...
+    """
     def __init__(self, size):
         self.top = 0
         self.item_w = [None] * size
@@ -123,4 +127,11 @@ class Stack(object):
         else:
             raise W_ExecutionError('stack overflow',
                                    'stack.pushsome(%d items)' % n).wrap()
+
+
+if config.INLINE_STACKOP:
+    for name in '''ref pop popsome peek settop dropsome dropto push
+            pushsome'''.split():
+        getattr(Stack, name).im_func._always_inline_ = True
+
 
