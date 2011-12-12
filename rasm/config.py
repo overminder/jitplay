@@ -1,0 +1,2 @@
+INLINE_OPCODE = False
+INLINE_DISPATCH = False
