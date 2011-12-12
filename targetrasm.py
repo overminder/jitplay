@@ -9,6 +9,10 @@ def target(driver, argl):
     driver.exe_name = EXE_NAME
     return main, None
 
+def jitpolicy(driver):
+    from pypy.jit.codewriter.policy import JitPolicy
+    return JitPolicy()
+
 def makecode(lst):
     return ''.join([chr(ival) for ival in lst])
 
@@ -57,7 +61,8 @@ def main(argv):
     f.stack = s
     f.code = main_code
     w_ret = f.enter_dispatchloop()
-    print w_ret.to_string()
+    if w_ret:
+        print w_ret.to_string()
     return 0
 
 if __name__ == '__main__':
