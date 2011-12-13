@@ -1,5 +1,5 @@
 from pypy.tool.pairtype import extendabletype
-from pypy.rlib.jit import hint
+from pypy.rlib.jit import hint, unroll_safe
 from rasm.error import OperationError
 from rasm.model import W_Root, W_Error
 from rasm import config
@@ -38,6 +38,7 @@ class Stack(object):
     """ It's especially amazing that an unsafe stack performs worse
         than a checked stack...
     """
+    _immutable_fields_ = ['item_w']
     def __init__(self, size):
         self.top = 0
         self.item_w = [None] * size
@@ -69,7 +70,9 @@ class Stack(object):
             raise W_ExecutionError('null pointer', 'stack.pop()').wrap()
         return w_pop
 
+    @unroll_safe
     def popsome(self, n):
+        n = hint(n, promote=True)
         return [self.pop() for _ in xrange(n)]
 
     def peek(self):
@@ -94,6 +97,7 @@ class Stack(object):
                                    'stack.settop(%s)' %
                                    w_top.to_string()).wrap()
 
+    @unroll_safe
     def dropsome(self, n):
         n = hint(n, promote=True)
         t = self.top

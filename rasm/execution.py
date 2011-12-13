@@ -18,7 +18,7 @@ class __extend__(W_Frame):
         dispatch._always_inline_ = True
 
     def enter_dispatchloop(self):
-        self = hint(self, access_directly=True)
+        #self = hint(self, access_directly=True)
         try:
             while True:
                 driver.jit_merge_point(pc=self.pc, code=self.code,

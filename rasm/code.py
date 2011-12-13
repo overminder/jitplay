@@ -23,6 +23,28 @@ codemap = dict((name, i) for (i, name) in enumerate(codenames))
 class CodeEnum(object):
     vars().update(codemap)
 
+shortarg_op = '''
+INT SYMBOL
+ARRAY
+FLOAD
+GOTO BRANCHIFNOT
+TRY THROW CATCH
+'''.split()
+
+bytearg_op = '''
+LOAD STORE
+FCALL FTAILCALL
+'''.split()
+
+def argwidth(opcode):
+    name = codenames[opcode]
+    if name in shortarg_op:
+        return 2
+    elif name in bytearg_op:
+        return 1
+    else:
+        return 0
+
 class W_ArgError(W_Error):
     def __init__(self, expected, got, w_func):
         self.expected = expected
@@ -53,14 +75,15 @@ class W_Function(W_Root):
         return f_local
 
 class __extend__(W_Frame):
-    _virtualizable2_ = [
-        'constpool',
-        'code',
-        'f_local',
-        'pc',
-        'prev',
-        'stack',
-    ]
+    #_virtualizable2_ = [
+    #    'pc',
+    #    'prev',
+    #    'constpool',
+    #    'code',
+    #    'f_local',
+    #    'stack',
+    #]
+    _immutable_fields_ = ['constpool', 'code', 'f_local', 'prev', 'stack']
     constpool = None # Shared constant pool.
     code = None # Code object.
     f_local = None # Frame locals, consider flatten this
@@ -69,8 +92,6 @@ class __extend__(W_Frame):
 
     def __init__(self, stack, code, f_local=None, prev=LAST_FRAME,
                  constpool=None):
-        self = hint(self, access_directly=True,
-                          fresh_virtualizable=True)
         self.stack = stack
         self.prev = prev
         self.code = code

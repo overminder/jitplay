@@ -29,6 +29,8 @@ class W_Root(object):
         raise W_TypeError('Array', self, 'alen()').wrap()
 
 class W_Int(W_Root):
+    _immutable_fields_ = ['ival']
+
     def __init__(self, ival):
         self.ival = ival
 
