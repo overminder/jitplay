@@ -87,7 +87,7 @@ class __extend__(W_Frame):
     constpool = None # Shared constant pool.
     code = None # Code object.
     f_local = None # Frame locals, consider flatten this
-                    # into the stack as well?
+                   # into the stack as well?
     pc = 0 # Program counter.
 
     def __init__(self, stack, code, f_local=None, prev=LAST_FRAME,
