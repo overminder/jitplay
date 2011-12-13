@@ -1,7 +1,6 @@
 import sys 
-from rasm.frame import Stack
 from rasm.code import CodeEnum, W_Function
-from rasm.execution import W_Frame
+from rasm.execution import Frame, Context
 
 EXE_NAME = "rasm-c"
 
@@ -52,11 +51,14 @@ def main(argv):
         CodeEnum.NIL,
         CodeEnum.FRET,
     ])
-    w_func = W_Function()
-    w_func.nargs = 1
-    w_func.code = func_code
-    f = W_Frame(Stack(1024), main_code, constpool=[w_func])
-    w_ret = f.enter_dispatchloop()
+    const_w = []
+    w_func = W_Function(nb_args=1, nb_locals=1, framesize=4,
+                        code=func_code, const_w=const_w)
+    const_w.append(w_func)
+
+    ctx = Context()
+    f = Frame(10, main_code, const_w=const_w, ctx=ctx)
+    w_ret = f.run()
     if w_ret:
         print w_ret.to_string()
     return 0

@@ -1,5 +1,5 @@
-from pypy.rlib.jit import hint, we_are_jitted
-from rasm.frame import W_Frame, LAST_FRAME, W_ExecutionError
+from pypy.rlib.jit import hint, we_are_jitted, unroll_safe
+from rasm.frame import Frame, W_ExecutionError
 from rasm.model import (W_Root, W_Error, W_Int, W_Array, w_nil,
         w_true, w_false, W_TypeError, W_ValueError)
 from rasm.jit import driver
@@ -36,6 +36,7 @@ LOAD STORE
 FCALL FTAILCALL
 '''.split()
 
+# For debug's purpose.
 def argwidth(opcode):
     name = codenames[opcode]
     if name in shortarg_op:
@@ -64,39 +65,48 @@ class W_ReturnFromTopLevel(W_Error):
 
 
 class W_Function(W_Root):
-    name = None # function name
-    code = None # list of bytecodes
-    nargs = 0
+    _immutables_ = ['name', 'code', 'framesize', 'nb_args',
+                    'nb_locals', 'const_w']
+    def __init__(self, name=None, code=None, framesize=0, nb_args=0,
+                 nb_locals=0, const_w=0):
+        self.name = name
+        self.code = code
+        self.framesize = framesize
+        self.nb_args = nb_args
+        self.nb_locals = nb_locals
+        self.const_w = const_w
+                
 
-    def buildlocals(self, stack, nargs):
-        if nargs != self.nargs:
-            raise W_ArgError(self.nargs, nargs, self).wrap()
-        f_local = stack.popsome(nargs)
-        return f_local
+class __extend__(Frame):
+    """ Extended Frame object that can interpret bytecode.
+    """
+    _virtualizable2_ = [
+        'pc',
+        'stacktop',
+        'f_prev',
+        'code',
+        'ctx',
+        'const_w',
+        'local_w',
+    ]
+    _immutable_fields_ = ['const_w', 'code[*]', 'ctx', 'local_w']
 
-class __extend__(W_Frame):
-    #_virtualizable2_ = [
-    #    'pc',
-    #    'prev',
-    #    'constpool',
-    #    'code',
-    #    'f_local',
-    #    'stack',
-    #]
-    _immutable_fields_ = ['constpool', 'code', 'f_local', 'prev', 'stack']
-    constpool = None # Shared constant pool.
+    const_w = None # Shared constant pool.
     code = None # Code object.
-    f_local = None # Frame locals, consider flatten this
-                   # into the stack as well?
+    ctx = None
     pc = 0 # Program counter.
 
-    def __init__(self, stack, code, f_local=None, prev=LAST_FRAME,
-                 constpool=None):
-        self.stack = stack
-        self.prev = prev
+    def __init__(self, size, code, nb_locals=0,
+                 const_w=None, ctx=None):
+        self = hint(self, access_directly=True,
+                          fresh_virtualizable=True)
+        self.stacktop = nb_locals
+        self.local_w = [None] * (size + nb_locals)
+        self.nb_locals= nb_locals
+
+        self.const_w = const_w
         self.code = code
-        self.f_local = f_local
-        self.constpool = constpool
+        self.ctx = ctx
 
     def nextbyte(self):
         b = self.code[self.pc]
@@ -110,120 +120,129 @@ class __extend__(W_Frame):
 
     def LOAD(self):
         index = self.nextbyte()
-        w_val = self.f_local[index]
+        w_val = self.local_w[index]
         if w_val is None:
             raise W_ExecutionError('unbound local variable', 'load()').wrap()
-        self.stack.push(w_val)
+        self.push(w_val)
 
     def STORE(self):
         index = self.nextbyte()
-        self.f_local[index] = self.stack.pop()
+        self.local_w[index] = self.pop()
 
     def POP(self):
-        self.stack.pop()
+        self.pop()
 
     def DUP(self):
-        self.stack.push(self.stack.peek())
+        self.push(self.peek())
 
     def ROT(self):
-        w_x = self.stack.pop()
-        w_y = self.stack.peek()
-        self.stack.settop(w_x)
-        self.stack.push(w_y)
+        w_x = self.pop()
+        w_y = self.peek()
+        self.settop(w_x)
+        self.push(w_y)
 
     def INT(self):
         ival = self.nextshort()
-        self.stack.push(W_Int(ival))
+        self.push(W_Int(ival))
 
     def SYMBOL(self):
         index = self.nextshort()
-        w_symbol = self.constpool[index]
-        self.stack.push(w_symbol)
+        w_symbol = self.const_w[index]
+        self.push(w_symbol)
 
     def NIL(self):
-        self.stack.push(w_nil)
+        self.push(w_nil)
 
     def TRUE(self):
-        self.stack.push(w_true)
+        self.push(w_true)
 
     def FALSE(self):
-        self.stack.push(w_false)
+        self.push(w_false)
 
     def ARRAY(self):
         size = self.nextshort()
-        self.stack.push(W_Array(size))
+        self.push(W_Array(size))
 
     def AREF(self):
-        w_index = self.stack.pop()
-        w_array = self.stack.peek()
+        w_index = self.pop()
+        w_array = self.peek()
         w_val = w_array.aref(w_index.to_int())
-        self.stack.settop(w_val)
+        self.settop(w_val)
 
     def ASET(self):
-        w_val = self.stack.pop()
-        w_index = self.stack.pop()
-        w_array = self.stack.pop()
+        w_val = self.pop()
+        w_index = self.pop()
+        w_array = self.pop()
         w_array.aset(w_index.to_int(), w_val)
 
     def ALEN(self):
-        w_array = self.stack.peek()
-        self.stack.settop(w_array.alen())
+        w_array = self.peek()
+        self.settop(w_array.alen())
 
     def IADD(self):
-        w_y = self.stack.pop()
-        w_x = self.stack.peek()
-        self.stack.settop(W_Int(w_x.to_int() + w_y.to_int()))
+        w_y = self.pop()
+        w_x = self.peek()
+        self.settop(W_Int(w_x.to_int() + w_y.to_int()))
 
     def ISUB(self):
-        w_y = self.stack.pop()
-        w_x = self.stack.peek()
-        self.stack.settop(W_Int(w_x.to_int() - w_y.to_int()))
+        w_y = self.pop()
+        w_x = self.peek()
+        self.settop(W_Int(w_x.to_int() - w_y.to_int()))
 
     def IMUL(self):
-        w_y = self.stack.pop()
-        w_x = self.stack.peek()
-        self.stack.settop(W_Int(w_x.to_int() * w_y.to_int()))
+        w_y = self.pop()
+        w_x = self.peek()
+        self.settop(W_Int(w_x.to_int() * w_y.to_int()))
 
     def IDIV(self):
-        w_y = self.stack.pop()
-        w_x = self.stack.peek()
+        w_y = self.pop()
+        w_x = self.peek()
         y = w_y.to_int()
         if y == 0:
             raise W_ValueError('divide by zero', w_x, 'idiv()').wrap()
-        self.stack.settop(W_Int(w_x.to_int() * y))
+        self.settop(W_Int(w_x.to_int() * y))
 
     def FLOAD(self):
         index = self.nextshort()
-        w_func = self.constpool[index]
-        self.stack.push(w_func)
+        w_func = self.const_w[index]
+        self.push(w_func)
 
+    @unroll_safe
     def FCALL(self):
-        s = self.stack
-        w_func = s.pop()
+        w_func = self.pop()
         if not isinstance(w_func, W_Function):
             raise W_TypeError('Function', w_func, 'fcall()').wrap()
 
-        nargs = self.nextbyte()
-        # This will pop arguments from the frame.
-        f_local = w_func.buildlocals(s, nargs)
-        index = s.top
-        s.push(self)
-        return W_Frame(s, w_func.code, f_local, index, self.constpool)
+        nb_args = self.nextbyte()
+        # Argument count checking. (We currently don't consider complex
+        # calling conventions like varargs...)
+        if nb_args != w_func.nb_args:
+            raise W_ArgError(w_func.nb_args, nb_args, w_func).wrap()
+
+        # Create a new frame and link its back to self.
+        frame = Frame(size=w_func.framesize + nb_args,
+                      code=w_func.code,
+                      nb_locals=w_func.nb_locals,
+                      const_w=w_func.const_w,
+                      ctx=self.ctx)
+        # Pop arguments from self frame to that frame.
+        i = nb_args - 1
+        local_w = frame.local_w
+        while i >= 0:
+            local_w[i] = self.pop()
+            i -= 1
+        self.ctx.enter(frame)
+        return frame
 
     def FRET(self):
-        s = self.stack
-        p = self.prev
-
-        w_val = s.peek()
-        if p == LAST_FRAME:
+        w_val = self.pop()
+        f_prev = self.ctx.leave(self)
+        if f_prev is None:
+            # Return from toplevel.
             raise W_ReturnFromTopLevel(w_val).wrap()
 
-        w_prevframe = s.ref(p)
-        assert isinstance(w_prevframe, W_Frame)
-
-        s.dropto(p + 1)
-        s.settop(w_val)
-        return w_prevframe
+        f_prev.push(w_val)
+        return f_prev
 
     def FTAILCALL(self):
         raise NotImplementedError
@@ -234,7 +253,7 @@ class __extend__(W_Frame):
 
     def BRANCHIFNOT(self):
         offset = self.nextshort()
-        if not self.stack.pop().to_bool():
+        if not self.pop().to_bool():
             self.pc += offset
         #driver.can_enter_jit(pc=self.pc, code=self.code,
         #                     frame=self)
@@ -249,36 +268,36 @@ class __extend__(W_Frame):
         raise NotImplementedError
 
     def IS(self):
-        w_x = self.stack.pop()
-        w_y = self.stack.peek()
-        self.stack.settop(w_x.is_w(w_y))
+        w_x = self.pop()
+        w_y = self.peek()
+        self.settop(w_x.is_w(w_y))
 
     def EQ(self):
-        w_x = self.stack.pop()
-        w_y = self.stack.peek()
-        self.stack.settop(w_x.eq_w(w_y))
+        w_x = self.pop()
+        w_y = self.peek()
+        self.settop(w_x.eq_w(w_y))
 
     def LT(self):
-        y = self.stack.pop().to_int()
-        x = self.stack.peek().to_int()
-        self.stack.settop(w_true if x < y else w_false)
+        y = self.pop().to_int()
+        x = self.peek().to_int()
+        self.settop(w_true if x < y else w_false)
 
     def NOT(self):
-        x = self.stack.pop().to_bool()
-        self.stack.settop(w_false if x else w_true)
+        x = self.pop().to_bool()
+        self.settop(w_false if x else w_true)
 
     def OR(self):
-        y = self.stack.pop().to_bool()
-        x = self.stack.peek().to_bool()
-        self.stack.settop(w_true if x or y else w_false)
+        y = self.pop().to_bool()
+        x = self.peek().to_bool()
+        self.settop(w_true if x or y else w_false)
 
     def AND(self):
-        y = self.stack.pop().to_bool()
-        x = self.stack.peek().to_bool()
-        self.stack.settop(w_true if x and y else w_false)
+        y = self.pop().to_bool()
+        x = self.peek().to_bool()
+        self.settop(w_true if x and y else w_false)
 
     def PRINT(self):
-        w_x = self.stack.pop()
+        w_x = self.pop()
         print w_x.to_string(),
 
     def NEWLINE(self):
@@ -289,10 +308,10 @@ def patching_ophandlers():
     def noimpl(self):
         raise NotImplementedError
     for name in codemap:
-        meth = getattr(W_Frame, name, None)
+        meth = getattr(Frame, name, None)
         if meth is None:
             print 'Stub implementation for %s' % name
-            setattr(W_Frame, name, noimpl)
+            setattr(Frame, name, noimpl)
         else:
             if config.INLINE_OPCODE:
                 meth.im_func._always_inline_ = True

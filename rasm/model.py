@@ -1,6 +1,8 @@
 from rasm.error import OperationError
+from pypy.rlib.objectmodel import UnboxedValue
 
 class W_Root(object):
+    __slots__ = []
     def to_string(self):
         return '<root>'
 
@@ -28,11 +30,9 @@ class W_Root(object):
     def alen(self):
         raise W_TypeError('Array', self, 'alen()').wrap()
 
-class W_Int(W_Root):
+class W_Int(W_Root, UnboxedValue):
     _immutable_fields_ = ['ival']
-
-    def __init__(self, ival):
-        self.ival = ival
+    __slots__ = ['ival']
 
     def to_string(self):
         return '%d' % self.ival

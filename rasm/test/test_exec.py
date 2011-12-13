@@ -1,14 +1,16 @@
 from unittest import TestCase
 from rasm.model import W_Int, symbol, w_nil, w_true, w_false, W_Array
 from rasm.error import OperationError
-from rasm.frame import Stack
 from rasm.code import CodeEnum, W_Function
-from rasm.execution import W_Frame
+from rasm.execution import Frame, Context
 
 def makecode(lst):
     return ''.join(map(chr, lst))
 
 class TestExec(TestCase):
+    def setUp(self):
+        self.ctx = Context()
+
     def test_simple_add(self):
         simple_add = makecode([
             CodeEnum.INT, 1, 0,
@@ -18,11 +20,8 @@ class TestExec(TestCase):
             CodeEnum.PRINT,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
-        f.stack = s
-        f.code = simple_add
-        w_ret = f.enter_dispatchloop()
+        f = Frame(2, simple_add, ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 3)
 
     def test_constpool(self):
@@ -32,12 +31,10 @@ class TestExec(TestCase):
             CodeEnum.PRINT,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
-        f.constpool = [symbol('hello')]
-        f.stack = s
-        f.code = load_symbol
-        w_ret = f.enter_dispatchloop()
+        f = Frame(2, load_symbol,
+                  const_w=[symbol('hello')],
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_string(), ':hello')
 
     def test_simple_call(self):
@@ -50,14 +47,13 @@ class TestExec(TestCase):
             CodeEnum.FCALL, 0,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
         w_func = W_Function()
         w_func.code = func_code
-        f.constpool = [w_func]
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        w_func.framesize = 2
+        f = Frame(2, main_code,
+                  const_w=[w_func],
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 1)
 
     def test_goto(self):
@@ -67,11 +63,9 @@ class TestExec(TestCase):
             CodeEnum.INT, 6, 0,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        f = Frame(2, main_code,
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 12)
 
     def test_lt(self):
@@ -81,11 +75,9 @@ class TestExec(TestCase):
             CodeEnum.LT,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        f = Frame(2, main_code,
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertFalse(w_ret.to_bool())
 
     def test_if(self):
@@ -96,11 +88,9 @@ class TestExec(TestCase):
             CodeEnum.INT, 12, 0,
             CodeEnum.FRET,
         ])
-        s = Stack(2)
-        f = W_Frame()
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        f = Frame(2, main_code,
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 6)
 
     def test_call_with_arg(self):
@@ -116,15 +106,14 @@ class TestExec(TestCase):
             CodeEnum.FCALL, 1,
             CodeEnum.FRET,
         ])
-        s = Stack(3)
-        f = W_Frame()
         w_func = W_Function()
-        w_func.nargs = 1
+        w_func.nb_args = 1
         w_func.code = func_code
-        f.constpool = [w_func]
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        w_func.framesize = 3
+        f = Frame(3, main_code,
+                  const_w=[w_func],
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 3)
 
     def test_call_with_recur(self):
@@ -156,14 +145,16 @@ class TestExec(TestCase):
             CodeEnum.FCALL, 1,
             CodeEnum.FRET,
         ])
-        s = Stack(100)
-        f = W_Frame()
         w_func = W_Function()
-        w_func.nargs = 1
+        w_func.nb_args = 1
         w_func.code = func_code
-        f.constpool = [w_func]
-        f.stack = s
-        f.code = main_code
-        w_ret = f.enter_dispatchloop()
+        w_func.const_w = [w_func]
+        w_func.nb_args = 1
+        w_func.nb_locals = 1
+        w_func.framesize = 2
+        f = Frame(4, main_code,
+                  const_w=[w_func],
+                  ctx=self.ctx)
+        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 55)
 

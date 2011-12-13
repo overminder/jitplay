@@ -1,5 +1,5 @@
 from pypy.tool.pairtype import extendabletype
-from pypy.rlib.jit import hint, unroll_safe
+from pypy.rlib.jit import hint, unroll_safe, vref_None
 from rasm.error import OperationError
 from rasm.model import W_Root, W_Error
 from rasm import config
@@ -21,51 +21,22 @@ class W_ExecutionError(W_Error):
      insn=...}
 """
 
-LAST_FRAME = -1
-
-class W_Frame(W_Root):
+class Frame(object):
     """ Base frame object that knows how to interact with the stack.
     """
     __metaclass__ = extendabletype
 
-    stack = None # Shared by all frames.
-    prev = LAST_FRAME # The previous frame slot in the stack, and
-                      # will be replaced by the return value of this
-                      # procedure call.
-
-
-class Stack(object):
-    """ It's especially amazing that an unsafe stack performs worse
-        than a checked stack...
-    """
-    _immutable_fields_ = ['item_w']
-    def __init__(self, size):
-        self.top = 0
-        self.item_w = [None] * size
-
-    def ref(self, index):
-        index = hint(index, promote=True)
-        assert index >= 0
-        try:
-            w_val = self.item_w[index]
-        except IndexError:
-            raise W_ExecutionError('stack index out of bound',
-                                   'stack.ref(%d)' % index).wrap()
-        if w_val is None:
-            raise W_ExecutionError('null pointer',
-                                   'stack.ref(%d)' % index).wrap()
-        return w_val
+    stacktop = 0 # Top of local_w stack.
+    local_w = None # Local variables, stack + local variables.
+    nb_locals = 0 # Number of local variables
+    f_prev = vref_None # The previous frame that this frame will return to.
 
     def pop(self):
-        t = self.top - 1
-        assert t >= 0
-        self.top = t
-        try:
-            w_pop = self.item_w[t]
-            self.item_w[t] = None
-        except IndexError:
-            raise W_ExecutionError('accessing empty stack',
-                                   'stack.pop()').wrap()
+        t = self.stacktop - 1
+        assert t >= self.nb_locals, 'accessing empty stack at stack.pop()'
+        self.stacktop = t
+        w_pop = self.local_w[t]
+        self.local_w[t] = None
         if w_pop is None:
             raise W_ExecutionError('null pointer', 'stack.pop()').wrap()
         return w_pop
@@ -76,70 +47,56 @@ class Stack(object):
         return [self.pop() for _ in xrange(n)]
 
     def peek(self):
-        t = self.top - 1
-        try:
-            assert t >= 0
-            w_val = self.item_w[t]
-        except IndexError:
-            raise W_ExecutionError('accessing empty stack',
-                                   'stack.peek()').wrap()
+        t = self.stacktop - 1
+        assert t >= self.nb_locals, 'accessing empty stack at stack.peek()'
+        w_val = self.local_w[t]
         if w_val is None:
             raise W_ExecutionError('null pointer', 'stack.peek()').wrap()
         return w_val
 
     def settop(self, w_top):
-        t = self.top - 1
-        try:
-            assert t >= 0
-            self.item_w[t] = w_top
-        except IndexError:
-            raise W_ExecutionError('accessing empty stack',
-                                   'stack.settop(%s)' %
-                                   w_top.to_string()).wrap()
+        t = self.stacktop - 1
+        assert t >= self.nb_locals, 'accessing empty stack at stack.settop(?)'
+        self.local_w[t] = w_top
 
     @unroll_safe
     def dropsome(self, n):
         n = hint(n, promote=True)
-        t = self.top
+        t = self.stacktop
         while n > 0:
             n -= 1
             t -= 1
-            try:
-                assert t >= 0
-                self.item_w[t] = None
-            except IndexError:
-                raise W_ExecutionError('accessing empty stack',
-                                       'stack.dropsome(%d)' % n).wrap()
-        self.top = t
+            assert t >= self.nb_locals, ('accessing empty stack',
+                                         'stack.dropsome(?)')
+            self.local_w[t] = None
+        self.stacktop = t
 
     def dropto(self, level):
         level = hint(level, promote=True)
-        self.dropsome(self.top - level)
+        self.dropsome(self.stacktop - level)
 
     def push(self, w_push):
-        try:
-            assert self.top >= 0
-            self.item_w[self.top] = w_push
-        except IndexError:
-            raise W_ExecutionError('stack overflow',
-                                   'stack.push(%s)' %
-                                   w_push.to_string()).wrap()
-        self.top += 1
+        t = self.stacktop
+        assert t >= self.nb_locals
+        assert t < len(self.local_w), 'stack overflow at stack.push(?)'
+        self.local_w[t] = w_push
+        self.stacktop = t + 1
 
     def pushsome(self, items_w):
-        t = self.top
+        t = self.stacktop
         n = len(items_w)
-        if t + n <= len(self.item_w):
-            self.item_w[t:t + n] = items_w
-            self.top = t + n
-        else:
-            raise W_ExecutionError('stack overflow',
-                                   'stack.pushsome(%d items)' % n).wrap()
+        assert t + n <= len(self.local_w), 'stack overflow at stack.pushsome(?)'
+        i = 0
+        while i < n:
+            # Workaround for virtualizable.
+            self.local_w[t + i] = items_w[i]
+            i += 1
+        self.stacktop = t + n
 
 
 if config.INLINE_STACKOP:
-    for name in '''ref pop popsome peek settop dropsome dropto push
+    for name in '''pop popsome peek settop dropsome dropto push
             pushsome'''.split():
-        getattr(Stack, name).im_func._always_inline_ = True
+        getattr(Frame, name).im_func._always_inline_ = True
 
 

@@ -18,6 +18,6 @@ def get_location(pc, code):
 
 driver = JitDriver(greens=['pc', 'code'],
                    reds=['frame'],
-                   #virtualizables=['frame'],
+                   virtualizables=['frame'],
                    get_printable_location=get_location)
 
