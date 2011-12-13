@@ -2,5 +2,5 @@
 # However, stack operations should always be inlined.
 INLINE_OPCODE = False
 INLINE_DISPATCH = False
-INLINE_STACKOP = True
+INLINE_STACKOP = False
 

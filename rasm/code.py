@@ -1,6 +1,8 @@
+from pypy.rlib.jit import hint, we_are_jitted
 from rasm.frame import W_Frame, LAST_FRAME, W_ExecutionError
 from rasm.model import (W_Root, W_Error, W_Int, W_Array, w_nil,
         w_true, w_false, W_TypeError, W_ValueError)
+from rasm.jit import driver
 from rasm import config
 
 codenames = '''
@@ -51,11 +53,29 @@ class W_Function(W_Root):
         return f_local
 
 class __extend__(W_Frame):
+    _virtualizable2_ = [
+        'constpool',
+        'code',
+        'f_local',
+        'pc',
+        'prev',
+        'stack',
+    ]
     constpool = None # Shared constant pool.
     code = None # Code object.
     f_local = None # Frame locals, consider flatten this
                     # into the stack as well?
     pc = 0 # Program counter.
+
+    def __init__(self, stack, code, f_local=None, prev=LAST_FRAME,
+                 constpool=None):
+        self = hint(self, access_directly=True,
+                          fresh_virtualizable=True)
+        self.stack = stack
+        self.prev = prev
+        self.code = code
+        self.f_local = f_local
+        self.constpool = constpool
 
     def nextbyte(self):
         b = self.code[self.pc]
@@ -167,16 +187,7 @@ class __extend__(W_Frame):
         f_local = w_func.buildlocals(s, nargs)
         index = s.top
         s.push(self)
-        return self.buildframe(s, index, w_func.code, f_local)
-
-    def buildframe(self, stack, prev, code, f_local):
-        w_frame = W_Frame()
-        w_frame.stack = stack
-        w_frame.prev = prev
-        w_frame.code = code
-        w_frame.f_local = f_local
-        w_frame.constpool = self.constpool
-        return w_frame
+        return W_Frame(s, w_func.code, f_local, index, self.constpool)
 
     def FRET(self):
         s = self.stack
@@ -204,6 +215,8 @@ class __extend__(W_Frame):
         offset = self.nextshort()
         if not self.stack.pop().to_bool():
             self.pc += offset
+        #driver.can_enter_jit(pc=self.pc, code=self.code,
+        #                     frame=self)
 
     def TRY(self):
         raise NotImplementedError

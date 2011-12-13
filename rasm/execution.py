@@ -1,4 +1,5 @@
 from pypy.rlib.unroll import unrolling_iterable
+from pypy.rlib.jit import hint
 from rasm.error import OperationError
 from rasm.code import W_Frame, codemap, W_ReturnFromTopLevel
 from rasm.jit import driver
@@ -17,6 +18,7 @@ class __extend__(W_Frame):
         dispatch._always_inline_ = True
 
     def enter_dispatchloop(self):
+        self = hint(self, access_directly=True)
         try:
             while True:
                 driver.jit_merge_point(pc=self.pc, code=self.code,

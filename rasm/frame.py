@@ -1,4 +1,5 @@
 from pypy.tool.pairtype import extendabletype
+from pypy.rlib.jit import hint
 from rasm.error import OperationError
 from rasm.model import W_Root, W_Error
 from rasm import config
@@ -42,6 +43,7 @@ class Stack(object):
         self.item_w = [None] * size
 
     def ref(self, index):
+        index = hint(index, promote=True)
         assert index >= 0
         try:
             w_val = self.item_w[index]
@@ -93,6 +95,7 @@ class Stack(object):
                                    w_top.to_string()).wrap()
 
     def dropsome(self, n):
+        n = hint(n, promote=True)
         t = self.top
         while n > 0:
             n -= 1
@@ -106,6 +109,7 @@ class Stack(object):
         self.top = t
 
     def dropto(self, level):
+        level = hint(level, promote=True)
         self.dropsome(self.top - level)
 
     def push(self, w_push):

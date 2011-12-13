@@ -52,14 +52,12 @@ def main(argv):
         CodeEnum.NIL,
         CodeEnum.FRET,
     ])
-    s = Stack(100)
-    f = W_Frame()
+    s = Stack(1024)
+    f = W_Frame(s, main_code)
     w_func = W_Function()
     w_func.nargs = 1
     w_func.code = func_code
     f.constpool = [w_func]
-    f.stack = s
-    f.code = main_code
     w_ret = f.enter_dispatchloop()
     if w_ret:
         print w_ret.to_string()
