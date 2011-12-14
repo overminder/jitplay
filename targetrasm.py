@@ -1,6 +1,6 @@
 import sys 
 from rasm.code import CodeEnum, W_Function
-from rasm.execution import Frame, Context
+from rasm.execution import Frame
 
 EXE_NAME = "rasm-c"
 
@@ -13,7 +13,7 @@ def jitpolicy(driver):
     return JitPolicy()
 
 def makecode(lst):
-    return ''.join([chr(ival) for ival in lst])
+    return [chr(ival) for ival in lst]
 
 def main(argv):
     try:
@@ -51,13 +51,12 @@ def main(argv):
         CodeEnum.NIL,
         CodeEnum.FRET,
     ])
-    const_w = []
+    const_w = [None] # If is resized, then it is not an array.
     w_func = W_Function(nb_args=1, nb_locals=1, framesize=4,
                         code=func_code, const_w=const_w)
-    const_w.append(w_func)
+    const_w[0] = w_func
 
-    ctx = Context()
-    f = Frame(10, main_code, const_w=const_w, ctx=ctx)
+    f = Frame(10, main_code, const_w=const_w)
     w_ret = f.run()
     if w_ret:
         print w_ret.to_string()

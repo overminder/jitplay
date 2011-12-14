@@ -1,7 +1,6 @@
 from pypy.tool.pairtype import extendabletype
 from pypy.rlib.jit import hint
 from pypy.rlib.debug import check_nonneg
-from pypy.rlib.rarithmetic import r_uint
 
 class Frame(object):
     __metaclass__ = extendabletype
