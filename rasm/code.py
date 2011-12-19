@@ -22,7 +22,7 @@ def load_code_descr():
 
 codenames, codemap, last_i16, last_u8 = load_code_descr()
 
-class CodeEnum(object):
+class Op(object):
     vars().update(codemap)
 
 # For debug's purpose and for dispatching.
@@ -35,23 +35,27 @@ def argwidth(opcode):
         return 2
 
 class HaltContinuation(Exception):
-    pass
+    def __init__(self, w_retval):
+        self.w_retval = w_retval
 
 class W_ArgError(W_Error):
-    def __init__(self, expected, got, w_func):
+    def __init__(self, expected, got, w_cont):
         self.expected = expected
         self.got = got
-        self.w_func = w_func
+        self.w_cont = w_cont
 
     def to_string(self):
         return '<ArgError: expecting %d arguments, but got %d at %s>' % (
-                self.expected, self.got, self.w_func.name)
+                self.expected, self.got, self.w_cont.w_proto.name)
 
 class W_Proto(W_Root):
     _immutable_ = True
+    name = '#f'
 
-    def __init__(self, code, nb_locals, upval_descr, const_w):
+    def __init__(self, code, nb_args, nb_locals, upval_descr, const_w):
         self.code = code
+        check_nonneg(nb_args)
+        self.nb_args = nb_args
         check_nonneg(nb_locals)
         self.nb_locals = nb_locals
         self.upval_descr = upval_descr
@@ -113,16 +117,16 @@ class __extend__(Frame):
 
     def nextshort(self):
         b0 = self.nextbyte()
-        b1 = seff.nextbyte()
+        b1 = self.nextbyte()
         return (b1 << 8) | b0
 
     def INT(self, ival):
         self.push(W_Int(ival))
 
-    def SYMBOL(self, index):
+    def LOADCONST(self, index):
         assert index >= 0
-        w_symbol = self.const_w[index]
-        self.push(w_symbol)
+        w_val = self.const_w[index]
+        self.push(w_val)
 
     @unroll_safe
     def BUILDCONT(self, index):
@@ -188,11 +192,11 @@ class __extend__(Frame):
         # Set arguments to local variables
         i = nb_args - 1
         while i >= 0:
-            frame.local_w[i] = self.pop()
+            self.local_w[i] = self.pop()
             i -= 1
 
     def HALT(self, _):
-        raise HaltContinuation
+        raise HaltContinuation(self.pop())
 
     def POP(self, _):
         self.pop()
@@ -245,10 +249,10 @@ class __extend__(Frame):
         w_y = self.peek()
         self.settop(w_x.is_w(w_y))
 
-    def EQ(self, _):
+    def EQUAL(self, _):
         w_x = self.pop()
         w_y = self.peek()
-        self.settop(w_x.eq_w(w_y))
+        self.settop(w_x.equal_w(w_y))
 
     def LT(self, _):
         y = self.pop().to_int()

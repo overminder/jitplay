@@ -6,7 +6,7 @@ from rasm.code import W_Proto, W_Cont
 
 class TestFrame(TestCase):
     def setUp(self):
-        self.w_proto = W_Proto([], 0, [], [])
+        self.w_proto = W_Proto([], 0, 0, [], [])
         self.w_cont = W_Cont(self.w_proto, [])
         self.frame = Frame(self.w_cont, [self.w_proto])
 
