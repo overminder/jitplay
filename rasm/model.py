@@ -1,9 +1,9 @@
 from rasm.error import OperationError
-from pypy.rlib.jit import hint, elidable
 from pypy.rlib.objectmodel import UnboxedValue
 
 class W_Root(object):
     __slots__ = []
+
     def to_string(self):
         return '<root>'
 
@@ -13,24 +13,91 @@ class W_Root(object):
     def to_bool(self):
         return True
 
+    # Pointer identity
     def is_w(self, w_x):
         if self is w_x:
             return w_true
         return w_false
 
     # Generic value equality.
-    def eq_w(self, w_x):
+    def equal_w(self, w_x):
         return self.is_w(w_x)
 
-    def aref(self, index):
-        raise W_TypeError('Array', self, 'aref(%d)' % index).wrap()
+    def car_w(self):
+        raise W_TypeError('Pair', self, 'car_w()').wrap()
 
-    def aset(self, index, w_val):
-        raise W_TypeError('Array', self, 'aset(%d, %s)' %
-                (index, w_val.to_string())).wrap()
+    def cdr_w(self):
+        raise W_TypeError('Pair', self, 'cdr_w()').wrap()
 
-    def alen(self):
-        raise W_TypeError('Array', self, 'alen()').wrap()
+    def set_car(self, w_car):
+        raise W_TypeError('MPair', self,
+                          'set_car(%s)' % w_car.to_string()).wrap()
+
+    def set_cdr(self, w_cdr):
+        raise W_TypeError('MPair', self,
+                          'set_cdr(%s)' % w_cdr.to_string()).wrap()
+
+
+class W_Pair(W_Root):
+    __slots__ = ['w_car', 'w_cdr']
+    _immutable_fields_ = ['w_car', 'w_cdr']
+
+    def __init__(self, w_car, w_cdr):
+        self.w_car = w_car
+        self.w_cdr = w_cdr
+
+    # Recursively compare equality
+    def equal_w(self, w_x):
+        if isinstance(w_x, W_Pair):
+            return (self.w_car.equal_w(w_x.w_car) and
+                    self.w_cdr.equal_w(w_x.w_cdr))
+        return w_false
+
+    def car_w(self):
+        return self.w_car
+
+    def cdr_w(self):
+        return self.w_cdr
+
+class W_MPair(W_Root):
+    __slots__ = ['w_car', 'w_cdr']
+
+    def __init__(self, w_car, w_cdr):
+        self.w_car = w_car
+        self.w_cdr = w_cdr
+
+    # Recursively compare equality
+    def equal_w(self, w_x):
+        if isinstance(w_x, W_MPair):
+            return (self.w_car.equal_w(w_x.w_car) and
+                    self.w_cdr.equal_w(w_x.w_cdr))
+        return w_false
+
+    def car_w(self):
+        return self.w_car
+
+    def cdr_w(self):
+        return self.w_cdr
+
+    def set_car(self, w_car):
+        self.w_car = w_car
+
+    def set_cdr(self, w_cdr):
+        self.w_cdr = w_cdr
+
+
+def list_to_pair(list_w):
+    w_pair = w_nil
+    for w_item in reversed(list_w):
+        w_pair = W_Pair(w_item, w_pair)
+    return w_pair
+
+def list_to_mpair(list_w):
+    w_pair = w_nil
+    for w_item in reversed(list_w):
+        w_pair = W_MPair(w_item, w_pair)
+    return w_pair
+
 
 class W_Int(W_Root, UnboxedValue):
     _immutable_fields_ = ['ival']
@@ -42,11 +109,12 @@ class W_Int(W_Root, UnboxedValue):
     def to_int(self):
         return self.ival
 
-    def eq_w(self, w_x):
+    def equal_w(self, w_x):
         if isinstance(w_x, W_Int):
             if self.ival == w_x.ival:
                 return w_true
         return w_false
+
 
 class W_Symbol(W_Root):
     interned_w = {}
@@ -63,14 +131,17 @@ def symbol(sval):
         W_Symbol.interned_w[sval] = w_sym
     return w_sym
 
+
 class W_Nil(W_Root):
     def to_string(self):
         return '#nil'
 
 w_nil = W_Nil()
 
+
 class W_Boolean(W_Root):
     pass
+
 
 class W_True(W_Boolean):
     def to_string(self):
@@ -86,37 +157,6 @@ class W_False(W_Boolean):
         return False
 
 w_false = W_False()
-
-class W_Array(W_Root):
-    def __init__(self, size, w_fill=w_nil):
-        self.item_w = [w_fill] * size
-
-    def eq_w(self, w_x):
-        if isinstance(w_x, W_Array):
-            if self.item_w == w_x.item_w:
-                return w_true
-        return w_false
-
-    def aref(self, index):
-        assert index >= 0
-        try:
-            return self.item_w[index]
-        except IndexError:
-            raise W_IndexError(self, index, 'aref(%d)' % index).wrap()
-
-    def aset(self, index, w_val):
-        assert index >= 0
-        try:
-            self.item_w[index] = w_val
-        except IndexError:
-            raise W_IndexError(self, index, 'aset(%d, %s)' %
-                    (index, w_val.to_string())).wrap()
-
-    def alen(self):
-        return W_Int(len(self.item_w))
-
-    def to_string(self):
-        return '[%s]' % ', '.join([w_o.to_string() for w_o in self.item_w])
 
 
 class W_Error(W_Root):
@@ -147,6 +187,7 @@ class W_IndexError(W_Error):
     def to_string(self):
         return '<IndexError: array index out of bound (%d) at %s>' % (
                 self.index, self.where)
+
 
 class W_ValueError(W_Error):
     def __init__(self, why, w_got, where):

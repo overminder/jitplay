@@ -1,6 +1,6 @@
 import sys 
 from rasm.model import symbol
-from rasm.code import CodeEnum, W_Function
+from rasm.code import CodeEnum, W_Proto, W_Cont
 from rasm.execution import Frame
 
 EXE_NAME = "rasm-c"

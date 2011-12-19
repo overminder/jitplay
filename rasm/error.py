@@ -8,3 +8,4 @@ class OperationError(Exception):
 
     def unwrap(self):
         return self.w_err
+

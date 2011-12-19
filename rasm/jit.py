@@ -11,10 +11,7 @@ def get_location(pc, code):
     else:
         assert width == 2
         arg = str(ord(code[pc + 1]) | (ord(code[pc + 2]) << 8))
-    return '%s:%s(%s)' % (
-        pc,
-        codenames[opcode],
-        arg)
+    return '%s:%s(%s)' % (pc, codenames[opcode], arg)
 
 driver = JitDriver(greens=['pc', 'code'],
                    reds=['frame'],
