@@ -1,13 +1,15 @@
 from pypy.rlib.jit import (hint, we_are_jitted, unroll_safe, dont_look_inside,
-        virtual_ref, virtual_ref_finish, elidable)
+        virtual_ref, virtual_ref_finish)
 from pypy.rlib.debug import check_nonneg
 from rasm.frame import Frame, W_ExecutionError
 from rasm.model import (W_Root, W_Error, W_Int, W_Array, w_nil,
         w_true, w_false, W_TypeError, W_ValueError)
 from rasm import config
 
-class LeaveFrame(Exception):
-    pass
+class ReturnFromTopLevel(Exception):
+    def __init__(self, w_val):
+        self.w_val = w_val
+
 
 codenames = '''
 LOAD STORE
@@ -82,30 +84,30 @@ class __extend__(Frame):
     _virtualizable2_ = [
         'pc',
         'stacktop',
-        #'f_prev',
         'code',
         'const_w[*]',
         'local_w[*]',
     ]
-    _immutable_fields_ = ['local_w', 'const_w', 'code[*]']
+    _immutable_fields_ = ['local_w', 'code[*]', 'const_w[*]', 'proto_w[*]']
 
-    def __init__(self, size, code, nb_locals=0, const_w=None):
+    def __init__(self, size, code, nb_locals=0, const_w=None,
+                 proto_w=None, f_prev=None):
         self = hint(self, access_directly=True,
                           fresh_virtualizable=True)
         self.stacktop = nb_locals
         self.local_w = [None] * (size + nb_locals)
-        self.nb_locals= nb_locals
+        self.nb_locals = nb_locals
         check_nonneg(self.nb_locals)
         self.const_w = const_w
+        self.proto_w = proto_w
+        self.f_prev = f_prev
         self.code = code
         self.pc = 0
 
     def nextbyte(self):
         pc = self.pc
-        co = self.code
         assert pc >= 0
-        check_nonneg(pc)
-        b = co[pc]
+        b = self.code[pc]
         self.pc = pc + 1
         return ord(b)
 
@@ -116,13 +118,17 @@ class __extend__(Frame):
 
     def LOAD(self):
         index = self.nextbyte()
+        assert index >= 0
         w_val = self.local_w[index]
         if w_val is None:
+            # This is essential... And will not result in
+            # a big performance hit.
             raise W_ExecutionError('unbound local variable', 'load()').wrap()
         self.push(w_val)
 
     def STORE(self):
         index = self.nextbyte()
+        assert index >= 0
         self.local_w[index] = self.pop()
 
     def POP(self):
@@ -202,7 +208,7 @@ class __extend__(Frame):
     def FLOAD(self):
         index = self.nextshort()
         assert index >= 0
-        w_func = self.const_w[index]
+        w_func = self.proto_w[index]
         self.push(w_func)
 
     @unroll_safe
@@ -217,14 +223,31 @@ class __extend__(Frame):
         if nb_args != w_func.nb_args:
             raise W_ArgError(w_func.nb_args, nb_args, w_func).wrap()
 
-        args_w = self.popsome(nb_args)
-        #vref_prev = virtual_ref(self)
-        w_retval = call_function(args_w, w_func, nb_args)
-        #virtual_ref_finish(vref_prev, self)
-        self.push(w_retval)
+        # Create a new frame and link its back to self.
+        frame = Frame(size=w_func.framesize + nb_args,
+                      code=w_func.code,
+                      nb_locals=w_func.nb_locals,
+                      const_w=w_func.const_w,
+                      proto_w=self.proto_w,
+                      f_prev=self)
+
+        # Pop arguments from self frame to that frame.
+        i = nb_args - 1
+        while i >= 0:
+            frame.local_w[i] = self.pop()
+            i -= 1
+
+        # XXX: recursive call, stack will grow.
+        return frame
 
     def FRET(self):
-        raise LeaveFrame()
+        w_retval = self.pop()
+        frame = self.f_prev
+        if frame:
+            frame.push(w_retval)
+            return frame
+        else:
+            raise ReturnFromTopLevel(w_retval)
 
     def FTAILCALL(self):
         raise NotImplementedError
@@ -282,19 +305,6 @@ class __extend__(Frame):
 
     def NEWLINE(self):
         print
-
-@unroll_safe
-def call_function(args_w, w_func, nb_args):
-    # Create a new frame and link its back to self.
-    frame = Frame(size=w_func.framesize + nb_args,
-                  code=w_func.code,
-                  nb_locals=w_func.nb_locals,
-                  const_w=w_func.const_w)
-    # Pop arguments from self frame to that frame.
-    for i in xrange(nb_args):
-        frame.local_w[i] = args_w[i]
-    # XXX: recursive call, stack will grow.
-    return frame.run()
 
 
 def patching_ophandlers():

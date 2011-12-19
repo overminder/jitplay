@@ -41,6 +41,7 @@ driver = JitDriver(greens=['pc', 'code'],
 
 
 class __extend__(Frame):
+    # XXX: seems code could not be virtualized.
     _virtualizable2_ = ['pc', 'code', 'stack[*]', 'top', 'f_local[*]']
     _immutable_fields_ = ['code[*]', 'f_local', 'stack']
 

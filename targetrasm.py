@@ -1,4 +1,5 @@
 import sys 
+from rasm.model import symbol
 from rasm.code import CodeEnum, W_Function
 from rasm.execution import Frame
 
@@ -51,12 +52,13 @@ def main(argv):
         CodeEnum.NIL,
         CodeEnum.FRET,
     ])
-    const_w = [None] # If is resized, then it is not an array.
-    w_func = W_Function(nb_args=1, nb_locals=1, framesize=4,
+    const_w = [symbol('hehe')] * 0 # Cannot be empty list.
+    proto_w = [None] # If is resized, then it is not an array.
+    w_func = W_Function(nb_args=1, nb_locals=1, framesize=3,
                         code=func_code, const_w=const_w)
-    const_w[0] = w_func
+    proto_w[0] = w_func
 
-    f = Frame(10, main_code, const_w=const_w)
+    f = Frame(2, main_code, const_w=const_w, proto_w=proto_w)
     w_ret = f.run()
     if w_ret:
         print w_ret.to_string()

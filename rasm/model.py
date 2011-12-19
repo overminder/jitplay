@@ -1,4 +1,5 @@
 from rasm.error import OperationError
+from pypy.rlib.jit import hint, elidable
 from pypy.rlib.objectmodel import UnboxedValue
 
 class W_Root(object):
@@ -17,6 +18,7 @@ class W_Root(object):
             return w_true
         return w_false
 
+    # Generic value equality.
     def eq_w(self, w_x):
         return self.is_w(w_x)
 
