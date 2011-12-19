@@ -12,7 +12,6 @@ class TestFrame(TestCase):
 
     def test_ctor(self):
         self.assertEquals(self.frame.stacktop, 0)
-        self.assertEquals(len(self.frame.local_w), 0)
 
     def test_push(self):
         i = W_Int(1)

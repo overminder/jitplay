@@ -73,10 +73,10 @@ def main(argv):
                          upval_descr=[], const_w=const_w0)
     w_maincont = W_Cont(proto_w[0], upval_w=[])
     proto_w[1] = W_Proto(fibo_k0, nb_args=1, nb_locals=1,
-                         upval_descr=[(0 << 1) | 1, (1 << 1) | 1],
+                         upval_descr=[chr(0), chr(1)],
                          const_w=const_w1)
     proto_w[2] = W_Proto(fibo_k1, nb_args=1, nb_locals=1,
-                         upval_descr=[(0 << 1) | 1, (1 << 1) | 0],
+                         upval_descr=[chr(0), chr(2)],
                          const_w=const_w1)
     proto_w[3] = W_Proto(fibo_entry, nb_args=2, nb_locals=2,
                          upval_descr=[],

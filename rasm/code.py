@@ -1,4 +1,4 @@
-from pypy.rlib.jit import hint, unroll_safe, dont_look_inside
+from pypy.rlib.jit import hint, unroll_safe, elidable, dont_look_inside
 from pypy.rlib.debug import check_nonneg
 from rasm.util import load_descr_file
 from rasm.frame import Frame, W_ExecutionError
@@ -78,13 +78,18 @@ class W_Cont(W_Root):
 
 class __extend__(Frame):
     """ Extended Frame object that can interpret bytecode.
+        A typical stack consist of three parts:
+        [frame_locals] [upvals] [temporaries]
+        0 .. nb_locals - 1
+                       nb_locals .. nb_locals + len(upval) - 1
+                                nb_locals + len(upval) .. len(stack_w)
     """
     _virtualizable2_ = [
         'stacktop',
         'pc',
+        'nb_locals',
+        'nb_upvals',
         'code',
-        'local_w',
-        'upval_w',
         'const_w',
         'proto_w',
         'stack_w[*]',
@@ -96,17 +101,25 @@ class __extend__(Frame):
                     access_directly=True,
                     fresh_virtualizable=True)
         self.stacktop = 0
-        self.apply_continuation(w_cont)
-        self.proto_w = proto_w
         self.stack_w = [None] * 32
+        self.proto_w = proto_w
+        self.apply_continuation(w_cont)
 
     @unroll_safe
     def apply_continuation(self, w_cont):
+        p = w_cont.w_proto
+        old_stacktop = self.stacktop
+        self.nb_locals = self.stacktop = p.nb_locals
+        self.nb_upvals = len(p.upval_descr)
         self.pc = 0
-        self.code = w_cont.w_proto.code
-        self.local_w = [None] * w_cont.w_proto.nb_locals
-        self.upval_w = w_cont.upval_w
-        self.const_w = w_cont.w_proto.const_w
+        self.code = p.code
+        for w_upval in w_cont.upval_w:
+            self.push(w_upval)
+        # In case some old upvals/locals are left on the stack...
+        if self.stacktop < old_stacktop:
+            for i in xrange(self.stacktop, old_stacktop + 1):
+                self.stackclear(i)
+        self.const_w = p.const_w
 
     def nextbyte(self):
         pc = self.pc
@@ -134,12 +147,7 @@ class __extend__(Frame):
         w_proto = self.proto_w[index]
         upval_w = [None] * len(w_proto.upval_descr)
         for i, descr in enumerate(w_proto.upval_descr):
-            upval_index, is_fresh = descr >> 1, descr & 1
-            assert upval_index >= 0
-            if is_fresh:
-                upval_w[i] = self.local_w[upval_index]
-            else:
-                upval_w[i] = self.upval_w[upval_index]
+            upval_w[i] = self.stackref(ord(descr))
         w_cont = W_Cont(w_proto, upval_w)
         self.push(w_cont)
 
@@ -153,7 +161,7 @@ class __extend__(Frame):
 
     def LOAD(self, index):
         assert index >= 0
-        w_val = self.local_w[index]
+        w_val = self.stackref(index)
         if w_val is None:
             # This is essential... And will not result in
             # a big performance hit.
@@ -163,15 +171,16 @@ class __extend__(Frame):
 
     def STORE(self, index):
         assert index >= 0
-        self.local_w[index] = self.pop()
+        self.stackset(index, self.pop())
 
     def GETUPVAL(self, index):
         assert index >= 0
-        w_val = self.upval_w[index]
+        w_val = self.stackref(index + self.nb_locals)
         self.push(w_val)
 
     def SETUPVAL(self, index):
-        self.upval_w[index] = self.pop()
+        assert index >= 0
+        self.stackset(index + self.nb_locals, self.pop())
 
     @unroll_safe
     def CONT(self, _):
@@ -179,21 +188,21 @@ class __extend__(Frame):
         if not isinstance(w_cont, W_Cont):
             raise W_TypeError('Continuation', w_cont, 'cont()').wrap()
 
-        nb_args = self.stacktop
-        w_proto = w_cont.w_proto
+        nb_args = self.stacktop - self.nb_locals - self.nb_upvals
+        p = w_cont.w_proto
         # Argument count checking. (We currently don't consider complex
         # calling conventions like varargs...)
-        if nb_args != w_proto.nb_args:
-            raise W_ArgError(w_proto.nb_args, nb_args, w_cont).wrap()
+        if nb_args != p.nb_args:
+            raise W_ArgError(p.nb_args, nb_args, w_cont).wrap()
 
-        # Switch to this continuation.
-        self.apply_continuation(w_cont)
-
-        # Set arguments to local variables
+        # Move arguments to local variables
         i = nb_args - 1
         while i >= 0:
-            self.local_w[i] = self.pop()
+            self.stackset(i, self.pop())
             i -= 1
+
+        # Switch to this continuation (adjust stack, push upvals, set const_w)
+        self.apply_continuation(w_cont)
 
     def HALT(self, _):
         raise HaltContinuation(self.pop())

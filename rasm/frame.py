@@ -46,3 +46,17 @@ class Frame(object):
         w_top = self.stack_w[t]
         return w_top
 
+    def stackref(self, index):
+        assert index >= 0
+        w_ref = self.stack_w[index]
+        return w_ref
+
+    def stackset(self, index, w_val):
+        assert w_val is not None
+        assert index >= 0
+        self.stack_w[index] = w_val
+
+    def stackclear(self, index):
+        assert index >= 0
+        self.stack_w[index] = None
+

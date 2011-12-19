@@ -18,8 +18,8 @@ class TestExec(TestCase):
             Op.PRINT,
             Op.HALT,
         ])
-        w_proto = W_Proto(simple_add, 0, 0, None, None)
-        w_cont = W_Cont(w_proto, None)
+        w_proto = W_Proto(simple_add, 0, 0, [], [])
+        w_cont = W_Cont(w_proto, [])
         frame = Frame(w_cont, [w_proto])
         w_ret = frame.run()
         self.assertEquals(w_ret.to_int(), 3)
@@ -31,8 +31,8 @@ class TestExec(TestCase):
             Op.PRINT,
             Op.HALT,
         ])
-        w_proto = W_Proto(code, 0, 0, None, [symbol('x')])
-        w_cont = W_Cont(w_proto, None)
+        w_proto = W_Proto(code, 0, 0, [], [symbol('x')])
+        w_cont = W_Cont(w_proto, [])
         frame = Frame(w_cont, [w_proto])
         w_ret = frame.run()
         self.assertEquals(w_ret.sval, 'x')
@@ -71,7 +71,7 @@ class TestExec(TestCase):
                               upval_descr=[], const_w=[])
         w_maincont = W_Cont(w_mainproto, upval_w=[])
         w_callproto = W_Proto(callcode, nb_args=0, nb_locals=0,
-                              upval_descr=[1], const_w=[])
+                              upval_descr=[chr(0)], const_w=[])
         frame = Frame(w_maincont, [w_callproto])
         w_ret = frame.run()
         self.assertEquals(w_ret.to_int(), 42)
@@ -128,10 +128,10 @@ class TestExec(TestCase):
                              upval_descr=[], const_w=const_w0)
         w_maincont = W_Cont(proto_w[0], upval_w=[])
         proto_w[1] = W_Proto(fibo_k0, nb_args=1, nb_locals=1,
-                             upval_descr=[(0 << 1) | 1, (1 << 1) | 1],
+                             upval_descr=[chr(0), chr(1)],
                              const_w=const_w1)
         proto_w[2] = W_Proto(fibo_k1, nb_args=1, nb_locals=1,
-                             upval_descr=[(0 << 1) | 1, (1 << 1) | 0],
+                             upval_descr=[chr(0), chr(2)],
                              const_w=const_w1)
         proto_w[3] = W_Proto(fibo_entry, nb_args=2, nb_locals=2,
                              upval_descr=[],
@@ -146,153 +146,5 @@ class TestExec(TestCase):
         const_w1[0] = w_fibocont
         frame = Frame(w_maincont, proto_w)
         w_ret = frame.run()
-        self.assertEquals(w_ret.to_int(), 55)
-
-class Foo(object):
-    def test_simple_add(self):
-        simple_add = makecode([
-            CodeEnum.INT, 1, 0,
-            CodeEnum.INT, 2, 0,
-            CodeEnum.IADD,
-            CodeEnum.DUP,
-            CodeEnum.PRINT,
-            CodeEnum.FRET,
-        ])
-        f = Frame(2, simple_add, ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_int(), 3)
-
-    def test_constpool(self):
-        load_symbol = makecode([
-            CodeEnum.LOAD, 0, 0,
-            CodeEnum.DUP,
-            CodeEnum.PRINT,
-            CodeEnum.FRET,
-        ])
-        f = Frame(2, load_symbol,
-                  const_w=[symbol('hello')],
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_string(), ':hello')
-
-    def test_simple_call(self):
-        func_code = makecode([
-            CodeEnum.INT, 1, 0,
-            CodeEnum.FRET,
-        ])
-        main_code = makecode([
-            CodeEnum.FLOAD, 0, 0,
-            CodeEnum.FCALL, 0,
-            CodeEnum.FRET,
-        ])
-        w_func = W_Function()
-        w_func.code = func_code
-        w_func.framesize = 2
-        f = Frame(2, main_code,
-                  const_w=[w_func],
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_int(), 1)
-
-    def test_goto(self):
-        main_code = makecode([
-            CodeEnum.INT, 12, 0,
-            CodeEnum.GOTO, 3, 0,
-            CodeEnum.INT, 6, 0,
-            CodeEnum.FRET,
-        ])
-        f = Frame(2, main_code,
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_int(), 12)
-
-    def test_lt(self):
-        main_code = makecode([
-            CodeEnum.INT, 12, 0,
-            CodeEnum.INT, 6, 0,
-            CodeEnum.LT,
-            CodeEnum.FRET,
-        ])
-        f = Frame(2, main_code,
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertFalse(w_ret.to_bool())
-
-    def test_if(self):
-        main_code = makecode([
-            CodeEnum.INT, 6, 0,
-            CodeEnum.FALSE,
-            CodeEnum.BRANCHIFNOT, 3, 0,
-            CodeEnum.INT, 12, 0,
-            CodeEnum.FRET,
-        ])
-        f = Frame(2, main_code,
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_int(), 6)
-
-    def test_call_with_arg(self):
-        func_code = makecode([
-            CodeEnum.LOAD, 0,
-            CodeEnum.INT, 2, 0,
-            CodeEnum.IADD,
-            CodeEnum.FRET,
-        ])
-        main_code = makecode([
-            CodeEnum.INT, 1, 0,
-            CodeEnum.FLOAD, 0, 0,
-            CodeEnum.FCALL, 1,
-            CodeEnum.FRET,
-        ])
-        w_func = W_Function()
-        w_func.nb_args = 1
-        w_func.code = func_code
-        w_func.framesize = 3
-        f = Frame(3, main_code,
-                  const_w=[w_func],
-                  ctx=self.ctx)
-        w_ret = f.run()
-        self.assertEquals(w_ret.to_int(), 3)
-
-    def test_call_with_recur(self):
-        # fibonacci
-        func_code = makecode([
-            CodeEnum.LOAD, 0,
-            CodeEnum.INT, 2, 0,
-            CodeEnum.LT,
-            CodeEnum.BRANCHIFNOT, 3, 0,
-            CodeEnum.LOAD, 0,
-            CodeEnum.FRET,
-
-            CodeEnum.LOAD, 0,
-            CodeEnum.INT, 1, 0,
-            CodeEnum.ISUB,
-            CodeEnum.FLOAD, 0, 0,
-            CodeEnum.FCALL, 1,
-            CodeEnum.LOAD, 0,
-            CodeEnum.INT, 2, 0,
-            CodeEnum.ISUB,
-            CodeEnum.FLOAD, 0, 0,
-            CodeEnum.FCALL, 1,
-            CodeEnum.IADD,
-            CodeEnum.FRET,
-        ])
-        main_code = makecode([
-            CodeEnum.INT, 10, 0,
-            CodeEnum.FLOAD, 0, 0,
-            CodeEnum.FCALL, 1,
-            CodeEnum.FRET,
-        ])
-        w_func = W_Function()
-        w_func.nb_args = 1
-        w_func.code = func_code
-        w_func.const_w = [w_func]
-        w_func.nb_args = 1
-        w_func.nb_locals = 1
-        w_func.framesize = 2
-        f = Frame(4, main_code,
-                  const_w=[w_func],
-                  ctx=self.ctx)
-        w_ret = f.run()
         self.assertEquals(w_ret.to_int(), 55)
 

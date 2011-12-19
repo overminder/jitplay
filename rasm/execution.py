@@ -27,6 +27,8 @@ class __extend__(Frame):
         # Simple recursive interpreter is 5x faster than non-jitted code,
         # What if we apply CPS? -> fibo: 3x, not too bad but still have
         # spaces to grow.
+        # Now that since locals, upvals and temporaries are on one
+        # virtualizable stack, we got 5x speed up back.
         self = hint(self, promote=True,
                     access_directly=True)
         try:
@@ -34,6 +36,7 @@ class __extend__(Frame):
                 driver.jit_merge_point(pc=self.pc, code=self.code,
                                        frame=self)
                 #print get_location(self.pc, self.code)
+                #print self.stack_w
                 self.dispatch()
         except HaltContinuation as ret:
             return ret.w_retval
