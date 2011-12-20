@@ -36,35 +36,35 @@ def main(argv):
         Op.HALT,
     ])
     fibo_entry = makecode([
-        Op.LOAD, 0,
-        Op.DUP,
-        Op.INT, 2, 0,
-        Op.LT,
-        Op.BRANCHIFNOT, 3, 0,
+        Op.LOAD, 0, # [n]
+        Op.DUP, # [n, n]
+        Op.INT, 2, 0, # [n, n, 2]
+        Op.LT, # [n, n < 2]
+        Op.BRANCHIFNOT, 3, 0, # [n]
         # base case
-        Op.LOAD, 1,
-        Op.CONT,
+        Op.LOAD, 1, # [n, k]
+        Op.CONT, # (k n)
         # recur case
-        Op.INT, 1, 0,
-        Op.ISUB,
+        Op.INT, 1, 0, # [n, 1]
+        Op.ISUB, # [n - 1]
         Op.BUILDCONT, 1, 0, # 'fibo-k0, with upval[0] = n, upval[1] = k
         Op.LOADCONST, 0, 0, # 'fibo
-        Op.CONT,
+        Op.CONT, # (fibo (- n 1) fibo-k0)
     ])
     fibo_k0 = makecode([
-        Op.GETUPVAL, 0,
-        Op.INT, 2, 0,
-        Op.ISUB,
+        Op.GETUPVAL, 0, # [n]
+        Op.INT, 2, 0, # [n, 2]
+        Op.ISUB, # [n - 2]
         Op.BUILDCONT, 2, 0, # 'fibo-k1, with upval[0] = $Rv_0, upval[1] = k
         Op.LOADCONST, 0, 0, # 'fibo
-        Op.CONT,
+        Op.CONT, # (fibo (- n 2) fibo-k1)
     ])
     fibo_k1 = makecode([
-        Op.GETUPVAL, 0, # $Rv_0
-        Op.LOAD, 0, # $Rv_1
-        Op.IADD,
-        Op.GETUPVAL, 1, # k
-        Op.CONT,
+        Op.GETUPVAL, 0, # [$Rv_0]
+        Op.LOAD, 0, # [$Rv_0, $Rv_1]
+        Op.IADD, # [$Rv_0 + $Rv_1]
+        Op.GETUPVAL, 1, # [$Rv_0 + $Rv_1, k]
+        Op.CONT, # (k (+ $Rv_0 $Rv_1))
     ])
     const_w0 = [None, None]
     const_w1 = [None]

@@ -1,6 +1,8 @@
 from rasm.error import OperationError
 from pypy.rlib.objectmodel import UnboxedValue
 
+USING_SMALLINT = False
+
 class W_Root(object):
     __slots__ = []
 
@@ -115,6 +117,45 @@ class W_Int(W_Root, UnboxedValue):
                 return w_true
         return w_false
 
+class W_SmallInt(W_Root, UnboxedValue):
+    _immutable_fields_ = ['ival']
+    __slots__ = ['ival']
+
+    def to_string(self):
+        return '%d' % self.ival
+
+    def to_int(self):
+        return self.ival
+
+    def equal_w(self, w_x):
+        if isinstance(w_x, W_Int):
+            if self.ival == w_x.ival:
+                return w_true
+        return w_false
+
+class W_Integer(W_Root):
+    _immutable_fields_ = ['ival']
+    __slots__ = ['ival']
+
+    def __init__(self, ival):
+        self.ival = ival
+
+    def to_string(self):
+        return '%d' % self.ival
+
+    def to_int(self):
+        return self.ival
+
+    def equal_w(self, w_x):
+        if isinstance(w_x, W_Int):
+            if self.ival == w_x.ival:
+                return w_true
+        return w_false
+
+if USING_SMALLINT:
+    W_Int = W_SmallInt
+else:
+    W_Int = W_Integer
 
 class W_Symbol(W_Root):
     interned_w = {}
