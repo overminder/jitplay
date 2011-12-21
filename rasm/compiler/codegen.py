@@ -9,22 +9,39 @@ from rasm.lang.model import symbol
 from rasm.lang.env import ModuleDict
 from rasm.rt.code import Op, W_Proto, W_Cont
 
-class AbstractFrame(object):
-    def __init__(self):
-        self.stacktop = 0
-        self.localmap = {}
+def compile_all(node, module_w):
+    interp = AbstractInterpreter(args=None, node=node)
+    interp.module_w = module_w
+    toplevel = interp.interp()
+    proto_w = [None] * len(interp.proto_w)
+    for i in xrange(len(interp.proto_w)):
+        proto_w[i] = interp.proto_w[i]
+    return W_Cont(toplevel, None), proto_w
 
 class AbstractInterpreter(object):
-    def __init__(self, node):
+    def __init__(self, args, node, parent=None):
+        self.parent = parent
+        if parent:
+            self.proto_w = parent.proto_w
+            self.module_w = parent.module_w
+        else:
+            self.proto_w = []
+            self.module_w = None
+        self.args = args
         self.node = node
-        self.frame = AbstractFrame()
+        self.localmap = {}
+        self.nb_locals = 0
+        self.upval_descr = []
         self.code = []
-
-    def run(self):
-        self.visit(self.node)
-
-    def visit(self, node):
-        node.accept_interp(self)
+        self.const_w = []
+        self.pending_lambdas = []
+        # Set argument.
+        if args:
+            for argnode in args:
+                w_name = argnode.w_form
+                assert isinstance(w_name, W_Symbol)
+                self.localmap[w_name] = self.nb_locals
+                self.nb_locals += 1
 
     def emitbyte(self, u8):
         self.code.append(chr(u8))
@@ -45,6 +62,104 @@ class AbstractInterpreter(object):
     def patchshort(self, index, i16):
         self.code[index] = chr(i16 & 0xff)
         self.code[index + 1] = chr((i16 >> 8) & 0xff)
+
+    def intern_const(self, w_val):
+        try:
+            return self.const_w.index(w_val)
+        except ValueError:
+            self.const_w.append(w_val)
+            return len(self.const_w) - 1
+
+    def def_item(self, w_name, toplevel=False):
+        if toplevel:
+            const_index = self.intern_const(w_name)
+            self.emitbyte(Op.SETGLOBAL)
+            self.emitbyte(const_index)
+            return
+        if w_name not in self.localmap:
+            self.localmap[w_name] = self.nb_locals
+            self.nb_locals += 1
+        local_index = self.localmap[w_name]
+        self.emitbyte(Op.STORE)
+        self.emitbyte(local_index)
+
+    def set_item(self, w_name):
+        # Is a local?
+        if w_name in self.localmap:
+            local_index = self.localmap[w_name]
+            self.emitbyte(Op.STORE)
+            self.emitbyte(local_index)
+            return
+        # Need to pull upval?
+        if self.parent:
+            upval_index = len(self.upval_descr)
+            if self.parent.pull_upval(self, w_name):
+                # Could pull the upval to here.
+                self.emitbyte(Op.SETUPVAL)
+                self.emitbyte(upval_index)
+                return
+        # No parent, or is global
+        const_index = self.intern_const(w_name)
+        self.emitbyte(Op.SETGLOBAL)
+        self.emitbyte(const_index)
+
+    def lookup_item(self, w_name):
+        if w_name in self.localmap:
+            local_index = self.localmap[w_name]
+            self.emitbyte(Op.LOAD)
+            self.emitbyte(local_index)
+            return
+        if self.parent:
+            upval_index = len(self.upval_descr)
+            if self.parent.pull_upval(self, w_name):
+                self.emitbyte(Op.GETUPVAL)
+                self.emitbyte(upval_index)
+                return
+        const_index = self.intern_const(w_name)
+        self.emitbyte(Op.GETGLOBAL)
+        self.emitbyte(const_index)
+
+    def pull_upval(self, child, w_name):
+        if w_name in self.localmap or (self.parent and
+                self.parent.pull_upval(self, w_name)):
+            from_index = self.localmap[w_name]
+            to_index = len(child.upval_descr) + child.nb_locals # XXX
+            child.upval_descr.append(from_index)
+            child.localmap[w_name] = to_index
+            return True
+        return False # is global
+
+    def visit(self, node):
+        node.accept_interp(self)
+
+    def interp(self):
+        self.visit(self.node)
+        for lambda_node, proto_index in self.pending_lambdas:
+            new_interp = AbstractInterpreter(args=lambda_node.formals,
+                                             node=lambda_node.body[0],
+                                             parent=self)
+            self.proto_w[proto_index] = new_interp.interp()
+        self.pending_lambdas = None
+        return build_proto(self)
+
+def build_proto(interp):
+    code = ''.join(interp.code)
+
+    if interp.args:
+        nb_args = len(interp.args)
+    else:
+        nb_args = 0
+
+    upval_descr = ['\0'] * len(interp.upval_descr)
+    for i, index in enumerate(interp.upval_descr):
+        upval_descr[i] = chr(index)
+
+    const_w = [None] * len(interp.const_w)
+    for i in xrange(len(interp.const_w)): # XXX PyPy hack
+        const_w[i] = interp.const_w[i]
+
+    return W_Proto(code, nb_args, interp.nb_locals,
+                   upval_descr, const_w, interp.module_w)
 
 
 class __extend__(Node):
@@ -77,103 +192,56 @@ class __extend__(Def):
     def accept_interp(self, interp):
         w_name = self.name.w_form
         assert isinstance(w_name, W_Symbol)
-        raise NotImplementedError
+        interp.visit(self.form)
+        interp.def_item(w_name, self.toplevel)
+        interp.emitbyte(Op.UNSPEC)
 
 class __extend__(Sete):
     def accept_interp(self, interp):
         w_name = self.name.w_form
         assert isinstance(w_name, W_Symbol)
-        raise NotImplementedError
+        interp.visit(self.form)
+        interp.set_item(w_name)
+        interp.emitbyte(Op.UNSPEC)
 
 class __extend__(Var):
     def accept_interp(self, interp):
-        pass
+        w_form = self.w_form
+        if not isinstance(self.w_form, W_Symbol):
+            raise W_TypeError('Symbol', w_form, 'Var.accept_interp()').wrap()
+        interp.lookup_item(self.w_form)
 
+class __extend__(Const):
+    def accept_interp(self, interp):
+        w_val = self.w_val
+        if w_val is w_nil:
+            interp.emitbyte(Op.NIL)
+            return
+        elif w_val is w_true:
+            interp.emitbyte(Op.TRUE)
+            return
+        elif w_val is w_false:
+            interp.emitbyte(Op.FALSE)
+            return
+        elif w_val is w_unspec:
+            interp.emitbyte(Op.UNSPEC)
+            return
+        elif isinstance(w_val, W_Int):
+            ival = w_val.ival
+            if 0 <= ival < (1 << 15):
+                interp.emitbyte(Op.INT)
+                interp.emitbyte(ival & 0xff)
+                interp.emitbyte((ival >> 8) & 0xff)
+                return
+        const_index = interp.intern_const(w_val)
+        interp.emitbyte(Op.LOADCONST)
+        interp.emitbyte(const_index)
 
-def main2(argv):
-    try:
-        fibo_arg = int(argv[1])
-    except (IndexError, ValueError):
-        fibo_arg = 30
+class __extend__(Lambda):
+    def accept_interp(self, interp):
+        proto_index = len(interp.proto_w)
+        interp.proto_w.append(None) # hold a position for this lambda
+        interp.emitbyte(Op.BUILDCONT)
+        interp.emitshort(proto_index)
+        interp.pending_lambdas.append((self, proto_index))
 
-    try:
-        stacksize = int(argv[2])
-    except (IndexError, ValueError):
-        stacksize = 16
-
-    maincode = makecode([
-        Op.INT, fibo_arg, 0,
-        Op.GETGLOBAL, 1, # 'display-and-halt
-        Op.GETGLOBAL, 0, # 'fibo
-        Op.CONT, # (fibo 10 display-and-halt)
-    ])
-    print_and_halt = makecode([
-        Op.LOAD, 0,
-        Op.DUP,
-        Op.PRINT,
-        Op.NEWLINE,
-        Op.HALT,
-    ])
-    fibo_entry = makecode([
-        Op.LOAD, 0,
-        Op.DUP,
-        Op.INT, 2, 0,
-        Op.LT,
-        Op.BRANCHIFNOT, 3, 0,
-        # base case
-        Op.LOAD, 1,
-        Op.CONT,
-        # recur case
-        Op.INT, 1, 0,
-        Op.ISUB,
-        Op.BUILDCONT, 1, 0, # 'fibo-k0, with upval[0] = n, upval[1] = k
-        Op.GETGLOBAL, 0, # 'fibo
-        Op.CONT,
-    ])
-    fibo_k0 = makecode([
-        Op.GETUPVAL, 0,
-        Op.INT, 2, 0,
-        Op.ISUB,
-        Op.BUILDCONT, 2, 0, # 'fibo-k1, with upval[0] = $Rv_0, upval[1] = k
-        Op.GETGLOBAL, 0, # 'fibo
-        Op.CONT,
-    ])
-    fibo_k1 = makecode([
-        Op.GETUPVAL, 0, # $Rv_0
-        Op.LOAD, 0, # $Rv_1
-        Op.IADD,
-        Op.GETUPVAL, 1, # k
-        Op.CONT,
-    ])
-    fibo_sym = symbol('fibo')
-    dah_sym = symbol('display-and-halt')
-    const_w0 = [fibo_sym, dah_sym]
-    const_w1 = [fibo_sym]
-    proto_w = [None, None, None, None, None]
-    w_module = ModuleDict()
-    proto_w[0] = W_Proto(maincode, nb_args=0, nb_locals=0,
-                         upval_descr=[], const_w=const_w0,
-                         w_module=w_module)
-    w_maincont = W_Cont(proto_w[0], upval_w=[])
-    proto_w[1] = W_Proto(fibo_k0, nb_args=1, nb_locals=1,
-                         upval_descr=[chr(0), chr(1)],
-                         const_w=const_w1, w_module=w_module)
-    proto_w[2] = W_Proto(fibo_k1, nb_args=1, nb_locals=1,
-                         upval_descr=[chr(0), chr(2)],
-                         const_w=const_w1, w_module=w_module)
-    proto_w[3] = W_Proto(fibo_entry, nb_args=2, nb_locals=2,
-                         upval_descr=[],
-                         const_w=const_w1, w_module=w_module)
-    w_fibocont = W_Cont(proto_w[3], upval_w=[])
-    proto_w[4] = W_Proto(print_and_halt, nb_args=1, nb_locals=1,
-                         upval_descr=[],
-                         const_w=[], w_module=w_module)
-    w_printcont = W_Cont(proto_w[4], upval_w=[])
-
-    w_module.setitem(fibo_sym, w_fibocont)
-    w_module.setitem(dah_sym, w_printcont)
-
-    frame = Frame(w_maincont, proto_w, stacksize)
-
-    w_ret = frame.run()
-    return 0

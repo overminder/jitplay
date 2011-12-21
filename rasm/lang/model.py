@@ -129,7 +129,6 @@ else:
 
 class W_Symbol(W_Root):
     interned_w = {}
-    gensym_counter = [0]
 
     def __init__(self, sval):
         self.sval = sval
@@ -144,13 +143,17 @@ def symbol(sval):
         W_Symbol.interned_w[sval] = w_sym
     return w_sym
 
+class GensymCounter(object):
+    i = 0
+gensym_counter = GensymCounter()
+
 def gensym(prefix='$Gensym_'):
-    i = W_Symbol.gensym_counter[0]
+    i = gensym_counter.i
     s = prefix + str(i)
     while s in W_Symbol.interned_w:                                             
         i += 1
         s = prefix + str(i)
-    W_Symbol.gensym_counter[0] = i + 1
+    gensym_counter.i = i + 1
     return symbol(s)
 
 class W_Nil(W_Root):
@@ -185,6 +188,11 @@ class W_Unspecified(W_Root):
 
 w_unspec = W_Unspecified()
 
+class W_Eof(W_Root):
+    def to_string(self):
+        return '#<eof>'
+
+w_eof = W_Eof()
 
 ################################################################################
 ################################################################################
@@ -239,7 +247,7 @@ class W_NameError(W_Error):
 
 
 def list_to_pair(list_w, w_last=w_nil):
-    for i in xrange(len(list_w), -1, -1):
+    for i in xrange(len(list_w) - 1, -1, -1):
         w_item = list_w[i]
         w_last = W_Pair(w_item, w_last)
     return w_last

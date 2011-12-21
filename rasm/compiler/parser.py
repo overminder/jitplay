@@ -14,10 +14,22 @@ def w_tag(s, w_x):
 class SchemeParser(PackratParser):
     r'''
     IGNORE:
+        SPACE | COMMENT;
+
+    SPACE:
         `[ \t\n\r]`;
+
+    COMMENT:
+        `;[^\n]*`;
 
     NUMBER:
         `[+-]?[0-9]+`;
+
+    TRUE:
+        '#t';
+
+    FALSE:
+        '#f';
 
     IDENT:
         `[0-9a-zA-Z!@#$%&*+-/<>=]+`;
@@ -27,6 +39,7 @@ class SchemeParser(PackratParser):
 
     program:
         c = sexpr*
+        IGNORE*
         EOF
         return {c};
 
@@ -37,6 +50,12 @@ class SchemeParser(PackratParser):
         IGNORE*
         ')'
         return {c}
+      | IGNORE*
+        c = TRUE
+        return {w_true}
+      | IGNORE*
+        c = FALSE
+        return {w_false}
       | IGNORE*
         c = NUMBER
         return {W_Int(int(c or 'ERR'))}

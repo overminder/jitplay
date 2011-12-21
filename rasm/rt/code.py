@@ -42,8 +42,13 @@ class W_Proto(W_Root):
         self.const_w = const_w
         self.w_module = w_module
 
+    def nb_upvals(self):
+        if self.upval_descr:
+            return len(self.upval_descr)
+        return 0
+
     def to_string(self):
-        return '<proto>'
+        return '#<proto %s>' % self.name
 
 
 class W_Cont(W_Root):
@@ -54,6 +59,6 @@ class W_Cont(W_Root):
         self.upval_w = upval_w
 
     def to_string(self):
-        return '<continuation>'
+        return '#<continuation %s>' % self.w_proto.name
 
 

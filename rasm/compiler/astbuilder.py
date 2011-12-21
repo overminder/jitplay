@@ -1,4 +1,4 @@
-from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified,
+from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified, W_Eof,
                              W_Pair, W_Nil, W_Symbol,
                              symbol, list_to_pair,
                              w_nil, w_true, w_false, w_unspec,
@@ -21,7 +21,7 @@ class __extend__(W_Root):
     def to_ast(self):
         raise NotImplementedError
 
-class __extend__(W_Int, W_Unspecified, W_Boolean):
+class __extend__(W_Int, W_Unspecified, W_Boolean, W_Eof):
     def to_ast(self):
         return Const(self)
 

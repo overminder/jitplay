@@ -27,6 +27,9 @@ class ModuleDict(W_Root):
         self.bindings_w = {}
         self.version = VersionTag()
 
+    def to_string(self):
+        return '#<ModuleDict (%d)>' % len(self.bindings_w)
+
     def mutated(self):
         self.version = VersionTag()
 

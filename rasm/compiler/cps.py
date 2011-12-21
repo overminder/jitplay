@@ -7,10 +7,11 @@ from rasm.compiler.ast import (Node, If, Seq, Apply, Def, Sete, Lambda,
                                Var, Const)
 
 class Rewriter(object):
-    def __init__(self, nodelist, lastcont=None):
+    def __init__(self, nodelist, lastcont=None, toplevel=False):
         self.nodelist = nodelist
         self.lastcont = lastcont or Var(symbol('halt'))
         self.cpsform = None
+        self.toplevel = toplevel
 
     def run(self):
         if len(self.nodelist) == 0:
@@ -19,9 +20,14 @@ class Rewriter(object):
         nodelist_copy = self.nodelist[1:]
         nodelist_copy.reverse()
         for node in nodelist_copy:
+            if self.toplevel and isinstance(node, Def):
+                node.toplevel = True
             ignore = newvar('$Ignore_')
             cont = Lambda([ignore],
                           [node.rewrite_cps(cont)])
+        firstnode = self.nodelist[0]
+        if self.toplevel and isinstance(firstnode, Def):
+            firstnode.toplevel = True
         self.cpsform = self.nodelist[0].rewrite_cps(cont)
         return self.cpsform
 
@@ -113,14 +119,37 @@ class __extend__(Apply):
 
 # XXX: define and set! need rethinking.
 class __extend__(Def):
+    """ (define var (form)) =>
+        (let ([var #unspecified])
+          (form (lambda ($Rv)
+            (set! var $Rv)
+            ...)))
+
+        (define v1 (form1))
+        (define v2 (form2)) =>
+        (let ([v1 #unspec]
+              [v2 #unspec])
+          (form1 (lambda ($Rv)
+            (set! v1 $Rv)
+            (form2 (lambda ($Rv)
+              (set! v2 $Rv)
+              ...)))))
+
+        So it's basically doing a letrec.
+        For toplevel defines, they could use the w_module instead...?
+    """
+    toplevel = False
     def rewrite_cps(self, cont):
         formrv = newvar('$FormRv_')
-        formcont = Lambda([formrv],
-                          [Apply(cont, [Def(self.name, formrv)])])
+        newdef = Def(self.name, formrv)
+        newdef.toplevel = self.toplevel
+        formcont = Lambda([formrv], [Apply(cont, [newdef])])
         return self.form.rewrite_cps(formcont)
 
     def to_cpsatom(self):
-        return Def(self.name, self.form.to_cpsatom())
+        newdef = Def(self.name, self.form.to_cpsatom())
+        newdef.toplevel = self.toplevel
+        return newdef
 
     def is_cpsatom(self):
         return self.form.is_cpsatom()

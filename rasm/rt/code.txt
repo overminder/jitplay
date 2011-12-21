@@ -30,9 +30,11 @@ ROT
 NIL
 TRUE
 FALSE
+UNSPEC
+
+# some primitiveops
 
 CONS
-MCONS
 CAR
 CDR
 SETCAR
@@ -51,4 +53,7 @@ OR
 AND
 PRINT
 NEWLINE
+
+REIFYCC
+READ
 

@@ -1,9 +1,12 @@
 from pypy.rlib.jit import hint, unroll_safe, elidable, dont_look_inside
 from rasm.rt.frame import Frame, W_ExecutionError
 from rasm.rt.code import codemap, W_Cont
+from rasm.rt.prelude import reify_callcc
 from rasm.lang.model import (W_Root, W_Int, W_Pair,
-                             w_nil, w_true, w_false,
+                             w_nil, w_true, w_false, w_unspec,
                              W_Error, W_TypeError, W_ValueError, W_NameError)
+
+DEBUG = False
 
 class HaltContinuation(Exception):
     def __init__(self, w_retval):
@@ -52,8 +55,9 @@ class __extend__(Frame):
         old_stacktop = self.stacktop
         self.stacktop = self.w_proto.nb_locals
         self.pc = 0
-        for w_upval in w_cont.upval_w:
-            self.push(w_upval)
+        if w_cont.upval_w:
+            for w_upval in w_cont.upval_w:
+                self.push(w_upval)
         # In case some old upvals/locals are left on the stack...
         if self.stacktop < old_stacktop:
             for i in xrange(self.stacktop, old_stacktop + 1):
@@ -115,8 +119,9 @@ class __extend__(Frame):
         if w_val is None:
             # This is essential... And will not result in
             # a big performance hit.
-            raise W_ExecutionError('unbound local variable',
-                                   'load(%d)' % index).wrap()
+            raise W_ExecutionError(
+                    'unbound local variable in %s' % self.w_proto.to_string(),
+                    'load(%d)' % index).wrap()
         self.push(w_val)
 
     def STORE(self, index):
@@ -135,23 +140,30 @@ class __extend__(Frame):
     @unroll_safe
     def CONT(self, _):
         w_cont = self.pop()
+        if DEBUG:
+            print 'enter cont %s' % w_cont.to_string()
         if not isinstance(w_cont, W_Cont):
             raise W_TypeError('Continuation', w_cont, 'cont()').wrap()
 
         nb_args = (self.stacktop - self.w_proto.nb_locals -
-                len(self.w_proto.upval_descr))
+                   self.w_proto.nb_upvals())
         # Argument count checking. (We currently don't consider complex
         # calling conventions like varargs...)
         if nb_args != w_cont.w_proto.nb_args:
-            raise W_ArgError(self.w_proto.nb_args, nb_args, w_cont).wrap()
+            raise W_ArgError(w_cont.w_proto.nb_args, nb_args, w_cont).wrap()
 
-        # Move arguments to local variables
-        i = nb_args - 1
-        while i >= 0:
-            self.stackset(i, self.pop())
-            i -= 1
+        # Move arguments to local variables.
+        offset = self.w_proto.nb_locals + self.w_proto.nb_upvals()
+        for i in xrange(nb_args):
+            self.stackset(i, self.stackref(i + offset))
 
-        # Switch to this continuation (adjust stack, push upvals, set const_w)
+        i = nb_args
+        while i < w_cont.w_proto.nb_locals:
+            self.stackclear(i)
+            i += 1
+
+        # Switch to this continuation (adjust/clear stack, push upvals,
+        # set w_proto, etc...)
         self.apply_continuation(w_cont)
 
     def HALT(self, _):
@@ -177,6 +189,9 @@ class __extend__(Frame):
 
     def FALSE(self, _):
         self.push(w_false)
+
+    def UNSPEC(self, _):
+        self.push(w_unspec)
 
     # Missing some cons operations
 
@@ -239,6 +254,36 @@ class __extend__(Frame):
     def NEWLINE(self, _):
         print
 
+    def CAR(self, _):
+        w_pair = self.peek()
+        self.settop(w_pair.car_w())
+
+    def CDR(self, _):
+        w_pair = self.peek()
+        self.settop(w_pair.cdr_w())
+
+    def CONS(self, _):
+        w_cdr = self.pop()
+        w_car = self.peek()
+        self.settop(W_Pair(w_car, w_cdr))
+
+    def SETCAR(self, _):
+        w_car = self.pop()
+        w_pair = self.pop()
+        w_pair.set_car(w_car)
+
+    def SETCDR(self, _):
+        w_cdr = self.pop()
+        w_pair = self.pop()
+        w_pair.set_cdr(w_cdr)
+
+    def REIFYCC(self, _):
+        w_cont = self.peek()
+        self.settop(reify_callcc(w_cont))
+
+    def READ(self, _):
+        from rasm.rt.prelude import read_stdin
+        self.push(read_stdin()[0]) # with values?
 
 def patching_ophandlers():
     def noimpl(self, _):

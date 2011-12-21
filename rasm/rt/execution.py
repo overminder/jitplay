@@ -2,13 +2,14 @@ from pypy.rlib.unroll import unrolling_iterable
 from pypy.rlib.jit import hint, unroll_safe
 from rasm.error import OperationError
 from rasm.rt.code import codemap, argwidth
-from rasm.rt.opimpl import Frame, HaltContinuation
+from rasm.rt.opimpl import Frame, HaltContinuation, DEBUG
 from rasm.rt.jit import driver, get_location
 
 unrolled_handlers = unrolling_iterable([(i, getattr(Frame, name))
                                         for (name, i) in codemap.iteritems()])
 
 class __extend__(Frame):
+
     @unroll_safe
     def dispatch(self, code):
         opcode = self.nextbyte(code)
@@ -36,11 +37,22 @@ class __extend__(Frame):
             while True:
                 driver.jit_merge_point(pc=self.pc, w_proto=self.w_proto,
                                        frame=self)
-                #print get_location(self.pc, self.w_proto)
-                #print self.stack_w
+                if DEBUG:
+                    print get_location(self.pc, self.w_proto)
+
                 self.dispatch(self.w_proto.code)
+
+                if DEBUG:
+                    self.print_stack()
         except HaltContinuation as ret:
             return ret.w_retval
         except OperationError as err:
             print err.unwrap().to_string()
+            self.print_stack()
+
+    def print_stack(self):
+        if DEBUG:
+            stack = ['%d:%s' % (i, w_x.to_string())
+                     for i, w_x in enumerate(self.stack_w) if w_x]
+            print '[' + ', '.join(stack) + ']'
 
