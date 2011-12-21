@@ -1,6 +1,6 @@
 from unittest import TestCase
-from rasm.model import (W_Int, symbol, w_nil, w_true, w_false, W_Pair,
-                        W_MPair, list_to_pair, list_to_mpair)
+from rasm.lang.model import (W_Int, symbol, w_nil, w_true, w_false, W_Pair,
+                             list_to_pair)
 from rasm.error import OperationError
 
 class TestModel(TestCase):
@@ -28,19 +28,6 @@ class TestModel(TestCase):
         p = W_Pair(s1, s2)
         self.assertEquals(p.car_w(), s1)
         self.assertEquals(p.cdr_w(), s2)
-        self.assertRaises(OperationError, p.set_car, s1)
-        self.assertRaises(OperationError, p.set_cdr, s1)
-
-    def test_mpair(self):
-        s1 = symbol('s1')
-        s2 = symbol('s2')
-        p = W_MPair(s1, s2)
-        self.assertEquals(p.car_w(), s1)
-        self.assertEquals(p.cdr_w(), s2)
-        p.set_car(s2)
-        p.set_cdr(s1)
-        self.assertEquals(p.car_w(), s2)
-        self.assertEquals(p.cdr_w(), s1)
 
     def test_pair_from_list(self):
         s1 = symbol('s1')
@@ -49,17 +36,4 @@ class TestModel(TestCase):
         self.assertEquals(p.car_w(), s1)
         self.assertEquals(p.cdr_w().car_w(), s2)
         self.assertEquals(p.cdr_w().cdr_w(), w_nil)
-
-    def test_pair_from_list(self):
-        s1 = symbol('s1')
-        s2 = symbol('s2')
-        p = list_to_mpair([s1, s2])
-        self.assertEquals(p.car_w(), s1)
-        self.assertEquals(p.cdr_w().car_w(), s2)
-        self.assertEquals(p.cdr_w().cdr_w(), w_nil)
-        p.set_car(p)
-        p.set_cdr(p)
-        self.assertEquals(p.car_w(), p)
-        self.assertEquals(p.cdr_w(), p)
-
 

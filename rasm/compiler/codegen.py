@@ -1,23 +1,96 @@
-import sys 
-from rasm.model import symbol
-from rasm.module import ModuleDict
-from rasm.code import Op, W_Proto, W_Cont
-from rasm.execution import Frame
+from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified,
+                             W_Pair, W_Nil, W_Symbol,
+                             symbol, list_to_pair, gensym,
+                             w_nil, w_true, w_false, w_unspec,
+                             W_ValueError, W_TypeError)
+from rasm.compiler.ast import (Node, If, Seq, Apply, Def, Sete, Lambda,
+                               Var, Const)
+from rasm.lang.model import symbol
+from rasm.lang.env import ModuleDict
+from rasm.rt.code import Op, W_Proto, W_Cont
 
-EXE_NAME = "rasm-c"
+class AbstractFrame(object):
+    def __init__(self):
+        self.stacktop = 0
+        self.localmap = {}
 
-def target(driver, argl):
-    driver.exe_name = EXE_NAME
-    return main, None
+class AbstractInterpreter(object):
+    def __init__(self, node):
+        self.node = node
+        self.frame = AbstractFrame()
+        self.code = []
 
-def jitpolicy(driver):
-    from pypy.jit.codewriter.policy import JitPolicy
-    return JitPolicy()
+    def run(self):
+        self.visit(self.node)
 
-def makecode(lst):
-    return ''.join([chr(ival) for ival in lst])
+    def visit(self, node):
+        node.accept_interp(self)
 
-def main(argv):
+    def emitbyte(self, u8):
+        self.code.append(chr(u8))
+
+    def emitshort(self, i16):
+        self.emitbyte(i16 & 0xff)
+        self.emitbyte((i16 >> 8) & 0xff)
+
+    def dummyshort(self):
+        res = len(self.code)
+        self.emitbyte(0)
+        self.emitbyte(0)
+        return res, res + 2
+
+    def codeptr(self):
+        return len(self.code)
+
+    def patchshort(self, index, i16):
+        self.code[index] = chr(i16 & 0xff)
+        self.code[index + 1] = chr((i16 >> 8) & 0xff)
+
+
+class __extend__(Node):
+    def accept_interp(self, interp):
+        raise NotImplementedError
+
+
+class __extend__(If):
+    def accept_interp(self, interp):
+        interp.visit(self.fst)
+        interp.emitbyte(Op.BRANCHIFNOT)
+        patch_index, jump_from = interp.dummyshort()
+        interp.visit(self.snd)
+        interp.patchshort(patch_index, interp.codeptr() - jump_from)
+        interp.visit(self.trd)
+
+class __extend__(Seq):
+    def accept_interp(self, interp):
+        for node in self.nodelist:
+            interp.visit(node)
+
+class __extend__(Apply):
+    def accept_interp(self, interp):
+        for arg in self.args:
+            interp.visit(arg)
+        interp.visit(self.proc)
+        interp.emitbyte(Op.CONT)
+
+class __extend__(Def):
+    def accept_interp(self, interp):
+        w_name = self.name.w_form
+        assert isinstance(w_name, W_Symbol)
+        raise NotImplementedError
+
+class __extend__(Sete):
+    def accept_interp(self, interp):
+        w_name = self.name.w_form
+        assert isinstance(w_name, W_Symbol)
+        raise NotImplementedError
+
+class __extend__(Var):
+    def accept_interp(self, interp):
+        pass
+
+
+def main2(argv):
     try:
         fibo_arg = int(argv[1])
     except (IndexError, ValueError):
@@ -104,7 +177,3 @@ def main(argv):
 
     w_ret = frame.run()
     return 0
-
-if __name__ == '__main__':
-    main(sys.argv)
-

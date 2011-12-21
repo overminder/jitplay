@@ -1,10 +1,9 @@
 from unittest import TestCase
-from rasm.model import (W_Int, symbol, w_nil, w_true, w_false, W_Pair,
-                        W_MPair)
-from rasm.module import ModuleDict
+from rasm.lang.model import W_Int, symbol, w_nil, w_true, w_false, W_Pair
+from rasm.lang.env import ModuleDict
+from rasm.rt.code import Op, W_Proto, W_Cont
+from rasm.rt.execution import Frame
 from rasm.error import OperationError
-from rasm.code import Op, W_Proto, W_Cont
-from rasm.execution import Frame
 
 def makecode(lst):
     return ''.join(map(chr, lst))

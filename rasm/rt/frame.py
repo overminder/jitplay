@@ -1,7 +1,7 @@
 from pypy.tool.pairtype import extendabletype
 from pypy.rlib.jit import hint, unroll_safe, dont_look_inside
 from rasm.error import OperationError
-from rasm.model import W_Root, W_Error
+from rasm.lang.model import W_Root, W_Error
 
 class W_ExecutionError(W_Error):
     def __init__(self, msg, where):

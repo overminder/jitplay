@@ -1,38 +1,9 @@
 from pypy.rlib.jit import hint, unroll_safe, elidable, dont_look_inside
-from pypy.rlib.debug import check_nonneg
-from rasm.util import load_descr_file
-from rasm.frame import Frame, W_ExecutionError
-from rasm.model import (W_Root, W_Int, W_Pair, W_MPair,
-                        w_nil, w_true, w_false,
-                        W_Error, W_TypeError, W_ValueError, W_NameError)
-
-def load_code_descr():
-    namelist = load_descr_file('code.txt')
-
-    last_i16 = namelist.index('_last_i16_')
-    del namelist[last_i16]
-    last_i16 -= 1
-
-    last_u8 = namelist.index('_last_u8_')
-    del namelist[last_u8]
-    last_u8 -= 1
-
-    namemap = dict((name, i) for (i, name) in enumerate(namelist))
-    return namelist, namemap, last_i16, last_u8
-
-codenames, codemap, last_i16, last_u8 = load_code_descr()
-
-class Op(object):
-    vars().update(codemap)
-
-# For debug's purpose and for dispatching.
-def argwidth(opcode):
-    if opcode > last_u8:
-        return 0
-    elif opcode > last_i16:
-        return 1
-    else:
-        return 2
+from rasm.rt.frame import Frame, W_ExecutionError
+from rasm.rt.code import codemap, W_Cont
+from rasm.lang.model import (W_Root, W_Int, W_Pair,
+                             w_nil, w_true, w_false,
+                             W_Error, W_TypeError, W_ValueError, W_NameError)
 
 class HaltContinuation(Exception):
     def __init__(self, w_retval):
@@ -47,36 +18,6 @@ class W_ArgError(W_Error):
     def to_string(self):
         return '<ArgError: expecting %d arguments, but got %d at %s>' % (
                 self.expected, self.got, self.w_cont.w_proto.name)
-
-class W_Proto(W_Root):
-    _immutable_ = True
-    name = '#f'
-
-    def __init__(self, code, nb_args, nb_locals, upval_descr,
-                 const_w, w_module=None):
-        self.code = code
-        check_nonneg(nb_args)
-        self.nb_args = nb_args
-        check_nonneg(nb_locals)
-        self.nb_locals = nb_locals
-        self.upval_descr = upval_descr
-        self.const_w = const_w
-        self.w_module = w_module
-
-    def to_string(self):
-        return '<proto>'
-
-
-class W_Cont(W_Root):
-    _immutable_ = True
-
-    def __init__(self, w_proto, upval_w):
-        self.w_proto = w_proto
-        self.upval_w = upval_w
-
-    def to_string(self):
-        return '<continuation>'
-
 
 class __extend__(Frame):
     """ Extended Frame object that can interpret bytecode.
@@ -309,4 +250,3 @@ def patching_ophandlers():
             setattr(Frame, name, noimpl)
 
 patching_ophandlers()
-

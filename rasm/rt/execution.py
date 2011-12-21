@@ -1,8 +1,9 @@
 from pypy.rlib.unroll import unrolling_iterable
 from pypy.rlib.jit import hint, unroll_safe
 from rasm.error import OperationError
-from rasm.code import Frame, codemap, argwidth, HaltContinuation
-from rasm.jit import driver, get_location
+from rasm.rt.code import codemap, argwidth
+from rasm.rt.opimpl import Frame, HaltContinuation
+from rasm.rt.jit import driver, get_location
 
 unrolled_handlers = unrolling_iterable([(i, getattr(Frame, name))
                                         for (name, i) in codemap.iteritems()])

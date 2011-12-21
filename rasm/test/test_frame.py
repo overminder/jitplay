@@ -1,8 +1,8 @@
 from unittest import TestCase
-from rasm.model import W_Int, symbol
+from rasm.rt.code import W_Proto, W_Cont
+from rasm.rt.opimpl import Frame
+from rasm.lang.model import W_Int, symbol
 from rasm.error import OperationError
-from rasm.frame import Frame
-from rasm.code import W_Proto, W_Cont
 
 class TestFrame(TestCase):
     def setUp(self):

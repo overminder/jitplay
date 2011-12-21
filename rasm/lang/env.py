@@ -3,7 +3,7 @@
     becomes a nop, worship big god!
 """
 from pypy.rlib.jit import hint, elidable
-from rasm.model import W_Root
+from rasm.lang.model import W_Root
 
 class VersionTag(object):
     pass

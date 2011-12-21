@@ -1,7 +1,7 @@
 from pypy.rlib.jit import JitDriver
 
 def get_location(pc, w_proto):
-    from rasm.code import codenames, argwidth
+    from rasm.rt.code import codenames, argwidth
     code = w_proto.code
     opcode = ord(code[pc])
     width = argwidth(opcode)
