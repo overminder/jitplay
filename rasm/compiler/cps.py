@@ -4,7 +4,7 @@ from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified,
                              w_nil, w_true, w_false, w_unspec,
                              W_ValueError, W_TypeError)
 from rasm.compiler.ast import (Node, If, Seq, Apply, Def, Sete, Lambda,
-                               Var, Const)
+                               Var, Const, PrimitiveOp)
 
 class Rewriter(object):
     def __init__(self, nodelist, lastcont=None, toplevel=False):
@@ -116,6 +116,19 @@ class __extend__(Apply):
 
     def is_cpsatom(self):
         return False
+
+class __extend__(PrimitiveOp):
+    def rewrite_cps(self, cont):
+        return Apply(self.proc, self.args).rewrite_cps(cont)
+
+    def to_cpsatom(self):
+        return PrimitiveOp(self.proc, [n.to_cpsatom() for n in self.args])
+
+    def is_cpsatom(self):
+        for arg in self.args:
+            if not arg.is_cpsatom():
+                return False
+        return True
 
 # XXX: define and set! need rethinking.
 class __extend__(Def):

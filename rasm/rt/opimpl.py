@@ -40,7 +40,7 @@ class __extend__(Frame):
     _immutable_fields_ = ['proto_w[*]']
 
     # XXX: stacksize would largely affect the efficiency.
-    def __init__(self, w_cont, proto_w, stacksize=64):
+    def __init__(self, w_cont, proto_w, stacksize=32):
         self = hint(self, promote=True,
                     access_directly=True,
                     fresh_virtualizable=True)

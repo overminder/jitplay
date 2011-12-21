@@ -4,7 +4,7 @@ from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified,
                              w_nil, w_true, w_false, w_unspec,
                              W_ValueError, W_TypeError)
 from rasm.compiler.ast import (Node, If, Seq, Apply, Def, Sete, Lambda,
-                               Var, Const)
+                               Var, Const, PrimitiveOp)
 from rasm.lang.model import symbol
 from rasm.lang.env import ModuleDict
 from rasm.rt.code import Op, W_Proto, W_Cont
@@ -187,6 +187,25 @@ class __extend__(Apply):
             interp.visit(arg)
         interp.visit(self.proc)
         interp.emitbyte(Op.CONT)
+
+class __extend__(PrimitiveOp):
+    def accept_interp(self, interp):
+        for arg in self.args:
+            interp.visit(arg)
+        interp.emitbyte(primitivemap[self.proc.w_form.sval])
+
+primitivemap = {
+    '+': Op.IADD,
+    '-': Op.ISUB,
+    '*': Op.IMUL,
+    '/': Op.IDIV,
+    'cons': Op.CONS,
+    'car': Op.CAR,
+    'cdr': Op.CDR,
+    '<': Op.LT,
+    'eq?': Op.IS,
+    'equal?': Op.EQUAL,
+}
 
 class __extend__(Def):
     def accept_interp(self, interp):

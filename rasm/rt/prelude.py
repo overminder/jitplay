@@ -29,6 +29,7 @@ def buildcont(name, nb_args, raw_code, nb_locals=-1):
 
 call_inplace = lambda x: x()
 
+# Well, primitive op should be far more efficient than this..
 @call_inplace
 def populate_library():
     regimpl(buildcont('+', 3, [Op.LOAD, 0,

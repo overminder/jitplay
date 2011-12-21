@@ -4,7 +4,7 @@ from rasm.lang.model import (W_Root, W_Int, W_Boolean, W_Unspecified, W_Eof,
                              w_nil, w_true, w_false, w_unspec,
                              W_ValueError, W_TypeError)
 from rasm.compiler.ast import (Node, If, Seq, Apply, Def, Sete, Lambda,
-                               Var, Const)
+                               Var, Const, PrimitiveOp)
 
 class Builder(object):
     def __init__(self, exprs_w):
@@ -36,6 +36,7 @@ class __extend__(W_Nil):
 
 class __extend__(W_Pair):
     def to_ast(self):
+        from rasm.compiler.codegen import primitivemap
         items_w, w_rest = self.to_list()
         if not w_rest.is_null():
             raise W_ValueError('not a proper-list', self, 'to_ast()').wrap()
@@ -57,6 +58,9 @@ class __extend__(W_Pair):
                 return build_lambda(self, w_args)
             elif tagname == 'begin':
                 return build_seq(self, w_args)
+            elif tagname in primitivemap:
+                return PrimitiveOp(w_proc.to_ast(),
+                                   [w_x.to_ast() for w_x in w_args])
 
         # normal application
         procnode = w_proc.to_ast()

@@ -39,6 +39,16 @@ class Apply(Node):
         return '(Apply %s %s)' % (self.proc.to_string(),
                                   show_list(self.args, lparen='[', rparen=']'))
 
+class PrimitiveOp(Node):
+    def __init__(self, proc, args):
+        self.proc = proc
+        self.args = args
+
+    def to_string(self):
+        return '(PrimitiveOp %s %s)' % (self.proc.to_string(),
+                                        show_list(self.args,
+                                                  lparen='[', rparen=']'))
+
 class Def(Node):
     def __init__(self, name, form):
         self.name = name

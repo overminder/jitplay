@@ -9,7 +9,6 @@ unrolled_handlers = unrolling_iterable([(i, getattr(Frame, name))
                                         for (name, i) in codemap.iteritems()])
 
 class __extend__(Frame):
-
     @unroll_safe
     def dispatch(self, code):
         opcode = self.nextbyte(code)
@@ -51,8 +50,8 @@ class __extend__(Frame):
             self.print_stack()
 
     def print_stack(self):
-        if DEBUG:
-            stack = ['%d:%s' % (i, w_x.to_string())
-                     for i, w_x in enumerate(self.stack_w) if w_x]
-            print '[' + ', '.join(stack) + ']'
+        pass
+        #stack = ['%d:%s' % (i, w_x.to_string())
+        #         for i, w_x in enumerate(self.stack_w) if w_x]
+        #print '[' + ', '.join(stack) + ']'
 
