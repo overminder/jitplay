@@ -9,12 +9,12 @@ unrolled_handlers = unrolling_iterable([(i, getattr(Frame, name))
 
 class __extend__(Frame):
     @unroll_safe
-    def dispatch(self):
-        opcode = self.nextbyte()
+    def dispatch(self, code):
+        opcode = self.nextbyte(code)
         if argwidth(opcode) == 2:
-            oparg = self.nextshort()
+            oparg = self.nextshort(code)
         elif argwidth(opcode) == 1:
-            oparg = self.nextbyte()
+            oparg = self.nextbyte(code)
         else:
             oparg = 0
         for someop, somemethod in unrolled_handlers:
@@ -33,11 +33,11 @@ class __extend__(Frame):
                     access_directly=True)
         try:
             while True:
-                driver.jit_merge_point(pc=self.pc, code=self.code,
+                driver.jit_merge_point(pc=self.pc, w_proto=self.w_proto,
                                        frame=self)
-                #print get_location(self.pc, self.code)
+                #print get_location(self.pc, self.w_proto)
                 #print self.stack_w
-                self.dispatch()
+                self.dispatch(self.w_proto.code)
         except HaltContinuation as ret:
             return ret.w_retval
         except OperationError as err:

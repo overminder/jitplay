@@ -215,7 +215,7 @@ class W_TypeError(W_Error):
         self.where = where
 
     def to_string(self):
-        return '<TypeError: expecting %s, but got %s at %s>' % (
+        return '<TypeError: expecting %s, but got %s at %s.>' % (
                 self.expected, self.w_got.to_string(), self.where)
 
 
@@ -226,7 +226,7 @@ class W_IndexError(W_Error):
         self.where = where
 
     def to_string(self):
-        return '<IndexError: array index out of bound (%d) at %s>' % (
+        return '<IndexError: array index out of bound (%d) at %s.>' % (
                 self.index, self.where)
 
 
@@ -237,6 +237,14 @@ class W_ValueError(W_Error):
         self.where = where
 
     def to_string(self):
-        return '<ValueError: %s for %s at %s>' % (
+        return '<ValueError: %s for %s at %s.>' % (
                 self.why, self.w_got.to_string(), self.where)
+
+class W_NameError(W_Error):
+    def __init__(self, w_name):
+        self.w_name = w_name
+
+    def to_string(self):
+        return '<NameError: name "%s" is not defined.>' % (
+                self.w_name.to_string())
 

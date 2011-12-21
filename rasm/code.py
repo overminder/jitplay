@@ -4,7 +4,7 @@ from rasm.util import load_descr_file
 from rasm.frame import Frame, W_ExecutionError
 from rasm.model import (W_Root, W_Int, W_Pair, W_MPair,
                         w_nil, w_true, w_false,
-                        W_Error, W_TypeError, W_ValueError)
+                        W_Error, W_TypeError, W_ValueError, W_NameError)
 
 def load_code_descr():
     namelist = load_descr_file('code.txt')
@@ -52,7 +52,8 @@ class W_Proto(W_Root):
     _immutable_ = True
     name = '#f'
 
-    def __init__(self, code, nb_args, nb_locals, upval_descr, const_w):
+    def __init__(self, code, nb_args, nb_locals, upval_descr,
+                 const_w, w_module=None):
         self.code = code
         check_nonneg(nb_args)
         self.nb_args = nb_args
@@ -60,6 +61,7 @@ class W_Proto(W_Root):
         self.nb_locals = nb_locals
         self.upval_descr = upval_descr
         self.const_w = const_w
+        self.w_module = w_module
 
     def to_string(self):
         return '<proto>'
@@ -87,59 +89,49 @@ class __extend__(Frame):
     _virtualizable2_ = [
         'stacktop',
         'pc',
-        'nb_locals',
-        'nb_upvals',
-        'code',
-        'const_w',
+        'w_proto',
         'proto_w',
         'stack_w[*]',
     ]
     _immutable_fields_ = ['proto_w[*]']
 
-    def __init__(self, w_cont, proto_w):
+    # XXX: stacksize would largely affect the efficiency.
+    def __init__(self, w_cont, proto_w, stacksize=64):
         self = hint(self, promote=True,
                     access_directly=True,
                     fresh_virtualizable=True)
         self.stacktop = 0
-        self.stack_w = [None] * 32
+        self.stack_w = [None] * stacksize
         self.proto_w = proto_w
         self.apply_continuation(w_cont)
 
     @unroll_safe
     def apply_continuation(self, w_cont):
-        p = w_cont.w_proto
+        self.w_proto = w_cont.w_proto
         old_stacktop = self.stacktop
-        self.nb_locals = self.stacktop = p.nb_locals
-        self.nb_upvals = len(p.upval_descr)
+        self.stacktop = self.w_proto.nb_locals
         self.pc = 0
-        self.code = p.code
         for w_upval in w_cont.upval_w:
             self.push(w_upval)
         # In case some old upvals/locals are left on the stack...
         if self.stacktop < old_stacktop:
             for i in xrange(self.stacktop, old_stacktop + 1):
                 self.stackclear(i)
-        self.const_w = p.const_w
 
-    def nextbyte(self):
+    def nextbyte(self, code):
         pc = self.pc
         assert pc >= 0
-        code = self.code[pc]
+        c = code[pc]
         self.pc = pc + 1
-        return ord(code)
+        return ord(c)
 
-    def nextshort(self):
-        b0 = self.nextbyte()
-        b1 = self.nextbyte()
+    def nextshort(self, code):
+        b0 = self.nextbyte(code)
+        b1 = self.nextbyte(code)
         return (b1 << 8) | b0
 
     def INT(self, ival):
         self.push(W_Int(ival))
-
-    def LOADCONST(self, index):
-        assert index >= 0
-        w_val = self.const_w[index]
-        self.push(w_val)
 
     @unroll_safe
     def BUILDCONT(self, index):
@@ -159,6 +151,23 @@ class __extend__(Frame):
         if not self.pop().to_bool():
             self.pc += offset
 
+    def LOADCONST(self, index):
+        assert index >= 0
+        w_val = self.w_proto.const_w[index]
+        self.push(w_val)
+
+    def GETGLOBAL(self, index):
+        w_key = self.w_proto.const_w[index]
+        w_val = self.w_proto.w_module.getitem(w_key)
+        if w_val is None:
+            raise W_NameError(w_key).wrap()
+        self.push(w_val)
+
+    def SETGLOBAL(self, index):
+        w_key = self.w_proto.const_w[index]
+        w_val = self.pop()
+        self.w_proto.w_module.setitem(w_key, w_val)
+
     def LOAD(self, index):
         assert index >= 0
         w_val = self.stackref(index)
@@ -175,12 +184,12 @@ class __extend__(Frame):
 
     def GETUPVAL(self, index):
         assert index >= 0
-        w_val = self.stackref(index + self.nb_locals)
+        w_val = self.stackref(index + self.w_proto.nb_locals)
         self.push(w_val)
 
     def SETUPVAL(self, index):
         assert index >= 0
-        self.stackset(index + self.nb_locals, self.pop())
+        self.stackset(index + self.w_proto.nb_locals, self.pop())
 
     @unroll_safe
     def CONT(self, _):
@@ -188,12 +197,12 @@ class __extend__(Frame):
         if not isinstance(w_cont, W_Cont):
             raise W_TypeError('Continuation', w_cont, 'cont()').wrap()
 
-        nb_args = self.stacktop - self.nb_locals - self.nb_upvals
-        p = w_cont.w_proto
+        nb_args = (self.stacktop - self.w_proto.nb_locals -
+                len(self.w_proto.upval_descr))
         # Argument count checking. (We currently don't consider complex
         # calling conventions like varargs...)
-        if nb_args != p.nb_args:
-            raise W_ArgError(p.nb_args, nb_args, w_cont).wrap()
+        if nb_args != w_cont.w_proto.nb_args:
+            raise W_ArgError(self.w_proto.nb_args, nb_args, w_cont).wrap()
 
         # Move arguments to local variables
         i = nb_args - 1
@@ -269,7 +278,7 @@ class __extend__(Frame):
         self.settop(w_true if x < y else w_false)
 
     def NOT(self, _):
-        x = self.pop().to_bool()
+        x = self.peek().to_bool()
         self.settop(w_false if x else w_true)
 
     def OR(self, _):

@@ -1,9 +1,10 @@
+
 INT # i16
-LOADCONST # i16
-BUILDCONT # i16
 
 BRANCHIF # i16
 BRANCHIFNOT # i16
+
+BUILDCONT # i16
 
 _last_i16_
 
@@ -11,6 +12,11 @@ LOAD # u8
 STORE # u8
 GETUPVAL # u8
 SETUPVAL # u8
+
+GETGLOBAL # u8
+SETGLOBAL # u8, [w_value] -> []
+
+LOADCONST # u8
 
 _last_u8_
 
