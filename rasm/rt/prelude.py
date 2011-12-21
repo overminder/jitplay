@@ -1,5 +1,5 @@
 from rasm.rt.code import W_Proto, W_Cont, Op
-from rasm.lang.env import ModuleDict
+from rasm.lang.env import ModuleDict, ModuleCell
 from rasm.lang.model import symbol, w_eof, w_nil
 
 def get_report_env():
@@ -44,11 +44,38 @@ def populate_library():
                                Op.LOAD, 2,
                                Op.CONT]))
 
+    regimpl(buildcont('*', 3, [Op.LOAD, 0,
+                               Op.LOAD, 1,
+                               Op.IMUL,
+                               Op.LOAD, 2,
+                               Op.CONT]))
+
+    regimpl(buildcont('/', 3, [Op.LOAD, 0,
+                               Op.LOAD, 1,
+                               Op.IDIV,
+                               Op.LOAD, 2,
+                               Op.CONT]))
+
     regimpl(buildcont('<', 3, [Op.LOAD, 0,
                                Op.LOAD, 1,
                                Op.LT,
                                Op.LOAD, 2,
                                Op.CONT]))
+
+    regimpl(buildcont('null?', 2, [Op.LOAD, 0,
+                                   Op.NULLP,
+                                   Op.LOAD, 1,
+                                   Op.CONT]))
+
+    regimpl(buildcont('pair?', 2, [Op.LOAD, 0,
+                                   Op.PAIRP,
+                                   Op.LOAD, 1,
+                                   Op.CONT]))
+
+    regimpl(buildcont('integer?', 2, [Op.LOAD, 0,
+                                      Op.INTEGERP,
+                                      Op.LOAD, 1,
+                                      Op.CONT]))
 
     regimpl(buildcont('cons', 3, [Op.LOAD, 0,
                                   Op.LOAD, 1,
@@ -119,7 +146,7 @@ callcc_proto = buildproto('reified-continuation', 2, [Op.LOAD, 0,
 callcc_proto.upval_descr = ['\0'] # dummy
 
 def reify_callcc(w_cont):
-    return W_Cont(callcc_proto, [w_cont])
+    return W_Cont(callcc_proto, [ModuleCell(w_cont)])
 
 def read_stdin():
     from rasm.ffi.libreadline import getline

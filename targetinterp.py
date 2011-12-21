@@ -8,6 +8,7 @@ from rasm.compiler.codegen import compile_all
 from rasm.compiler.codeviewer import dis_proto
 from rasm.rt.prelude import get_report_env
 from rasm.rt.execution import Frame
+from rasm.lang.model import w_unspec
 
 from pypy.jit.codewriter.policy import JitPolicy
 from pypy.rlib.streamio import open_file_as_stream
@@ -88,7 +89,9 @@ def repl():
         #    print w_proto, 'dis:'
         #    print dis_proto(w_proto)
         frame = Frame(w_maincont, proto_w)
-        print frame.run().to_string()
+        w_res = frame.run()
+        if w_res and w_res is not w_unspec:
+            print w_res.to_string()
 
     return 0
 

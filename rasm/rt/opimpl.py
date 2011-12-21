@@ -2,6 +2,7 @@ from pypy.rlib.jit import hint, unroll_safe, elidable, dont_look_inside
 from rasm.rt.frame import Frame, W_ExecutionError
 from rasm.rt.code import codemap, W_Cont
 from rasm.rt.prelude import reify_callcc
+from rasm.lang.env import ModuleCell, unwrap_cell
 from rasm.lang.model import (W_Root, W_Int, W_Pair,
                              w_nil, w_true, w_false, w_unspec,
                              W_Error, W_TypeError, W_ValueError, W_NameError)
@@ -84,7 +85,12 @@ class __extend__(Frame):
         w_proto = self.proto_w[index]
         upval_w = [None] * len(w_proto.upval_descr)
         for i, descr in enumerate(w_proto.upval_descr):
-            upval_w[i] = self.stackref(ord(descr))
+            w_val = self.stackref(ord(descr))
+            if isinstance(w_val, ModuleCell):
+                upval_w[i] = w_val
+            else:
+                upval_w[i] = ModuleCell(w_val)
+                self.stackset(ord(descr), upval_w[i]) # XXX
         w_cont = W_Cont(w_proto, upval_w)
         self.push(w_cont)
 
@@ -122,20 +128,27 @@ class __extend__(Frame):
             raise W_ExecutionError(
                     'unbound local variable in %s' % self.w_proto.to_string(),
                     'load(%d)' % index).wrap()
-        self.push(w_val)
+        self.push(unwrap_cell(w_val))
 
     def STORE(self, index):
         assert index >= 0
-        self.stackset(index, self.pop())
+        w_slot = self.stackref(index)
+        if isinstance(w_slot, ModuleCell):
+            w_slot.w_value = self.pop()
+        else:
+            self.stackset(index, self.pop())
 
     def GETUPVAL(self, index):
         assert index >= 0
-        w_val = self.stackref(index + self.w_proto.nb_locals)
-        self.push(w_val)
+        w_upval = self.stackref(index + self.w_proto.nb_locals)
+        assert isinstance(w_upval, ModuleCell)
+        self.push(w_upval.w_value)
 
     def SETUPVAL(self, index):
         assert index >= 0
-        self.stackset(index + self.w_proto.nb_locals, self.pop())
+        w_upval = self.stackref(index + self.w_proto.nb_locals)
+        assert isinstance(w_upval, ModuleCell)
+        w_upval.w_value = self.pop()
 
     @unroll_safe
     def CONT(self, _):
@@ -232,6 +245,15 @@ class __extend__(Frame):
         y = self.pop().to_int()
         x = self.peek().to_int()
         self.settop(w_true if x < y else w_false)
+
+    def NULLP(self, _):
+        self.settop(self.peek().is_w(w_nil))
+
+    def PAIRP(self, _):
+        self.settop(w_true if isinstance(self.peek(), W_Pair) else w_false)
+
+    def INTEGERP(self, _):
+        self.settop(w_true if isinstance(self.peek(), W_Int) else w_false)
 
     def NOT(self, _):
         x = self.peek().to_bool()
