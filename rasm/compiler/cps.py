@@ -25,6 +25,7 @@ class Rewriter(object):
             ignore = newvar('$Ignore_')
             cont = Lambda([ignore],
                           [node.rewrite_cps(cont)])
+            cont.name = gensym('$SeqCont_').sval
         firstnode = self.nodelist[0]
         if self.toplevel and isinstance(firstnode, Def):
             firstnode.toplevel = True
@@ -57,6 +58,7 @@ class __extend__(If):
                 fstcont = Lambda([fstval],
                                  [If(fstval, snd.rewrite_cps(cont),
                                              trd.rewrite_cps(cont))])
+                fstcont.name = gensym('$PredCont_').sval
                 return fst.rewrite_cps(fstcont)
         else:
             contval = newvar('$Cont_')
@@ -70,6 +72,7 @@ class __extend__(If):
                 fstcont = Lambda([fstval],
                                  [If(fstval, snd.rewrite_cps(contval),
                                              trd.rewrite_cps(contval))])
+                fstcont.name = gensym('$PredCont_').sval
                 return Seq([contdef, fst.rewrite_cps(fstcont)])
 
     def to_cpsatom(self):
@@ -99,6 +102,7 @@ class __extend__(Apply):
             procrv = newvar('$ProcRv_')
             proccont = Lambda([procrv],
                               [Apply(procrv, args).rewrite_cps(cont)])
+            proccont.name = gensym('$ProcCont_').sval
             return proc.rewrite_cps(proccont)
 
         atom_args = []
@@ -109,6 +113,7 @@ class __extend__(Apply):
                 newapply = Apply(proc, args[:i] + [argrv] + args[i + 1:])
                 argcont = Lambda([argrv],
                                  [newapply.rewrite_cps(cont)])
+                argcont.name = gensym('$ArgCont_').sval
                 return arg.rewrite_cps(argcont)
             else:
                 atom_args.append(arg.to_cpsatom())
@@ -157,6 +162,7 @@ class __extend__(Def):
         newdef = Def(self.name, formrv)
         newdef.toplevel = self.toplevel
         formcont = Lambda([formrv], [Apply(cont, [newdef])])
+        formcont.name = gensym('$FormCont_').sval
         return self.form.rewrite_cps(formcont)
 
     def to_cpsatom(self):
@@ -172,6 +178,7 @@ class __extend__(Sete):
         formrv = newvar('$FormRv_')
         formcont = Lambda([formrv],
                           [Apply(cont, [Sete(self.name, formrv)])])
+        formcont.name = gensym('$FormCont_').sval
         return self.form.rewrite_cps(formcont)
 
     def to_cpsatom(self):

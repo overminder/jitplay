@@ -83,10 +83,10 @@ def repl():
             continue
 
         print 'cps:', cpsform.to_string()
-        print w_maincont, 'dis:'
+        print w_maincont.to_string(), 'dis:'
         print dis_proto(w_maincont.w_proto)
         for w_proto in proto_w:
-            print w_proto, 'dis:'
+            print w_proto.to_string(), 'dis:'
             print dis_proto(w_proto)
         #frame = Frame(w_maincont, proto_w)
         #w_res = frame.run()

@@ -132,15 +132,18 @@ class AbstractInterpreter(object):
     def visit(self, node):
         node.accept_interp(self)
 
-    def interp(self):
+    def interp(self, name=None):
         self.visit(self.node)
         for lambda_node, proto_index in self.pending_lambdas:
             new_interp = AbstractInterpreter(args=lambda_node.formals,
                                              node=lambda_node.body[0],
                                              parent=self)
-            self.proto_w[proto_index] = new_interp.interp()
+            self.proto_w[proto_index] = new_interp.interp(name=lambda_node.name)
         self.pending_lambdas = None
-        return build_proto(self)
+        w_proto = build_proto(self)
+        if w_proto.name == '#f' and name:
+            w_proto.name = name
+        return w_proto
 
 def build_proto(interp):
     code = ''.join(interp.code)

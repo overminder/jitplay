@@ -132,10 +132,11 @@ def populate_library():
                                   Op.LOAD, 0,
                                   Op.CONT]))
 
-    # XXX cannot use this.
+    # XXX not finished yet.
     regimpl(buildcont('eval', 3, [Op.LOAD, 0, # [expr]
-                                  Op.LOAD, 1, # [module_w]
-                                  Op.LOAD, 2, # [cont]
+                                  Op.LOAD, 1, # [expr, w_module]
+                                  Op.COMPILE, # [expr_cont]
+                                  Op.LOAD, 2, # [expr_cont, cont]
                                   Op.CONT]))
 
     regimpl(buildcont('halt', 1, [Op.HALT]))
