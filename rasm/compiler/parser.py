@@ -32,7 +32,7 @@ class SchemeParser(PackratParser):
         '#f';
 
     IDENT:
-        `[0-9a-zA-Z!?@#$%&*+-/<>=]+`;
+        `[0-9a-zA-Z_!?@#$%&*+-/<>=]+`;
 
     EOF:
         !__any__;

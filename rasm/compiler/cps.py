@@ -19,7 +19,7 @@ class Rewriter(object):
         cont = self.lastcont
         nodelist_copy = self.nodelist[1:]
         nodelist_copy.reverse()
-        for node in nodelist_copy:
+        for node in nodelist_copy: # XXX: maybe we have atomic op here
             if self.toplevel and isinstance(node, Def):
                 node.toplevel = True
             ignore = newvar('$Ignore_')
