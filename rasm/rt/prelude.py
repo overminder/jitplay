@@ -1,3 +1,4 @@
+from pypy.rlib.jit import dont_look_inside
 from rasm.rt.code import W_Proto, W_Cont, Op
 from rasm.lang.env import ModuleDict, ModuleCell
 from rasm.lang.model import symbol, w_eof, w_nil
@@ -149,6 +150,7 @@ callcc_proto.upval_descr = ['\0'] # dummy
 def reify_callcc(w_cont):
     return W_Cont(callcc_proto, [ModuleCell(w_cont)])
 
+@dont_look_inside
 def read_stdin():
     from rasm.ffi.libreadline import getline
     from rasm.compiler.parser import parse_string, BacktrackException

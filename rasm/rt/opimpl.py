@@ -90,7 +90,7 @@ class __extend__(Frame):
                 upval_w[i] = w_val
             else:
                 upval_w[i] = ModuleCell(w_val)
-                self.stackset(ord(descr), upval_w[i]) # XXX
+                self.stackset(ord(descr), upval_w[i]) # XXX mutable upval.
         w_cont = W_Cont(w_proto, upval_w)
         self.push(w_cont)
 
@@ -205,8 +205,6 @@ class __extend__(Frame):
 
     def UNSPEC(self, _):
         self.push(w_unspec)
-
-    # Missing some cons operations
 
     def IADD(self, _):
         w_y = self.pop()

@@ -58,7 +58,7 @@ class __extend__(W_Pair):
                 return build_lambda(self, w_args)
             elif tagname == 'begin':
                 return build_seq(self, w_args)
-            elif tagname in primitivemap:
+            elif tagname in primitivemap: # XXX: should consider set!
                 return PrimitiveOp(w_proc.to_ast(),
                                    [w_x.to_ast() for w_x in w_args])
 

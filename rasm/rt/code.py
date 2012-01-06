@@ -29,6 +29,7 @@ def argwidth(opcode):
 
 class W_Proto(W_Root):
     _immutable_ = True
+    _immutable_fields_ = ['const_w[*]']
     name = '#f'
 
     def __init__(self, code, nb_args, nb_locals, upval_descr,
@@ -53,6 +54,7 @@ class W_Proto(W_Root):
 
 class W_Cont(W_Root):
     _immutable_ = True
+    _immutable_fields_ = ['upval_w[*]']
 
     def __init__(self, w_proto, upval_w):
         self.w_proto = w_proto

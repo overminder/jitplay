@@ -39,10 +39,11 @@
     ;; This is the actual generator, producing one item from a-list at a time
  
 (define gen-digit #f)
-(generate-one-element-at-a-time '(0 1 2 3 4 5 6 7 8 9)
+(generate-one-element-at-a-time '(0 1 2)
   (lambda ($Rv)
     (set! gen-digit $Rv)))
 
+(gen-digit (lambda (x) (display x) (newline)))
 (gen-digit (lambda (x) (display x) (newline)))
 (gen-digit (lambda (x) (display x) (newline)))
 (gen-digit (lambda (x) (display x) (newline)))

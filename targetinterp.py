@@ -44,15 +44,15 @@ def run_file(filename):
         print e.unwrap().to_string()
         return 1
     #print 'ast:', map(lambda o: o.to_string(), nodelist)
-    print cpsform.to_string()
+    #print cpsform.to_string()
     #print w_maincont, 'dis:'
     #print dis_proto(w_maincont.w_proto)
     #for w_proto in proto_w:
     #    print w_proto, 'dis:'
     #    print dis_proto(w_proto)
     #return 0
-    #frame = Frame(w_maincont, proto_w)
-    #frame.run()
+    frame = Frame(w_maincont, proto_w)
+    frame.run()
     return 0
 
 def repl():
